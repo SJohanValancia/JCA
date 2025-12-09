@@ -6,8 +6,9 @@ import '../models/user_model.dart';
 class AuthService {
   static const String baseUrl = 'https://jca-labd.onrender.com';
   final storage = const FlutterSecureStorage();
+  
+  static const Duration _timeout = Duration(seconds: 10);
 
-  // Registro
   Future<Map<String, dynamic>> register({
     required String nombre,
     required String telefono,
@@ -24,13 +25,15 @@ class AuthService {
           'usuario': usuario,
           'password': password,
         }),
-      );
+      ).timeout(_timeout);
 
       final data = jsonDecode(response.body);
 
       if (response.statusCode == 201 && data['success']) {
-        await storage.write(key: 'token', value: data['token']);
-        await storage.write(key: 'user', value: jsonEncode(data['usuario']));
+        await Future.wait([
+          storage.write(key: 'token', value: data['token']),
+          storage.write(key: 'user', value: jsonEncode(data['usuario'])),
+        ]);
         
         return {
           'success': true,
@@ -46,12 +49,11 @@ class AuthService {
     } catch (e) {
       return {
         'success': false,
-        'message': 'Error de conexión: $e',
+        'message': 'Error de conexion: No se pudo conectar al servidor',
       };
     }
   }
 
-  // Login
   Future<Map<String, dynamic>> login({
     required String usuario,
     required String password,
@@ -64,13 +66,25 @@ class AuthService {
           'usuario': usuario,
           'password': password,
         }),
-      );
+      ).timeout(_timeout);
 
       final data = jsonDecode(response.body);
 
+      // ✅ LOGS PARA DEBUG
+      print('===== RESPUESTA DEL SERVIDOR =====');
+      print('Status Code: ${response.statusCode}');
+      print('Data completa: $data');
+      if (data['usuario'] != null) {
+        print('Usuario: ${data['usuario']}');
+        print('JC-ID recibido: ${data['usuario']['jcId']}');
+      }
+      print('==================================');
+
       if (response.statusCode == 200 && data['success']) {
-        await storage.write(key: 'token', value: data['token']);
-        await storage.write(key: 'user', value: jsonEncode(data['usuario']));
+        await Future.wait([
+          storage.write(key: 'token', value: data['token']),
+          storage.write(key: 'user', value: jsonEncode(data['usuario'])),
+        ]);
         
         return {
           'success': true,
@@ -84,26 +98,26 @@ class AuthService {
         };
       }
     } catch (e) {
+      print('ERROR en login: $e');
       return {
         'success': false,
-        'message': 'Error de conexión: $e',
+        'message': 'Error de conexion: No se pudo conectar al servidor',
       };
     }
   }
 
-  // Verificar si hay sesión activa
   Future<bool> isLoggedIn() async {
     String? token = await storage.read(key: 'token');
     return token != null;
   }
 
-  // Cerrar sesión
   Future<void> logout() async {
-    await storage.delete(key: 'token');
-    await storage.delete(key: 'user');
+    await Future.wait([
+      storage.delete(key: 'token'),
+      storage.delete(key: 'user'),
+    ]);
   }
 
-  // Obtener usuario guardado
   Future<UserModel?> getUser() async {
     String? userJson = await storage.read(key: 'user');
     if (userJson != null) {

@@ -7,7 +7,6 @@ exports.registro = async (req, res) => {
   try {
     const { nombre, telefono, usuario, password } = req.body;
 
-    // Validaciones
     if (!nombre || !telefono || !usuario || !password) {
       return res.status(400).json({ 
         success: false,
@@ -29,7 +28,6 @@ exports.registro = async (req, res) => {
       });
     }
 
-    // Verificar si el usuario ya existe
     const usuarioExiste = await User.findOne({ usuario: usuario.toLowerCase() });
     if (usuarioExiste) {
       return res.status(400).json({ 
@@ -38,7 +36,6 @@ exports.registro = async (req, res) => {
       });
     }
 
-    // Verificar si el teléfono ya existe
     const telefonoExiste = await User.findOne({ telefono });
     if (telefonoExiste) {
       return res.status(400).json({ 
@@ -47,11 +44,9 @@ exports.registro = async (req, res) => {
       });
     }
 
-    // Encriptar contraseña
     const salt = await bcrypt.genSalt(10);
     const passwordHash = await bcrypt.hash(password, salt);
 
-    // Crear usuario
     const nuevoUsuario = new User({
       nombre,
       telefono,
@@ -61,7 +56,6 @@ exports.registro = async (req, res) => {
 
     await nuevoUsuario.save();
 
-    // Generar token
     const token = jwt.sign(
       { id: nuevoUsuario._id },
       process.env.JWT_SECRET,
@@ -76,7 +70,8 @@ exports.registro = async (req, res) => {
         id: nuevoUsuario._id,
         nombre: nuevoUsuario.nombre,
         telefono: nuevoUsuario.telefono,
-        usuario: nuevoUsuario.usuario
+        usuario: nuevoUsuario.usuario,
+        jcId: nuevoUsuario.jcId // 🆕 Incluir JC-ID
       }
     });
 
@@ -90,11 +85,11 @@ exports.registro = async (req, res) => {
 };
 
 // Login de usuario
+// Login de usuario
 exports.login = async (req, res) => {
   try {
     const { usuario, password } = req.body;
 
-    // Validaciones
     if (!usuario || !password) {
       return res.status(400).json({ 
         success: false,
@@ -102,7 +97,6 @@ exports.login = async (req, res) => {
       });
     }
 
-    // Buscar usuario
     const usuarioEncontrado = await User.findOne({ usuario: usuario.toLowerCase() });
     if (!usuarioEncontrado) {
       return res.status(401).json({ 
@@ -111,7 +105,6 @@ exports.login = async (req, res) => {
       });
     }
 
-    // Verificar contraseña
     const passwordValido = await bcrypt.compare(password, usuarioEncontrado.password);
     if (!passwordValido) {
       return res.status(401).json({ 
@@ -120,12 +113,18 @@ exports.login = async (req, res) => {
       });
     }
 
-    // Generar token
     const token = jwt.sign(
       { id: usuarioEncontrado._id },
       process.env.JWT_SECRET,
       { expiresIn: '30d' }
     );
+
+    // ✅ AGREGA ESTAS LÍNEAS AQUÍ
+    console.log('===== USUARIO ENCONTRADO =====');
+    console.log('ID:', usuarioEncontrado._id);
+    console.log('Nombre:', usuarioEncontrado.nombre);
+    console.log('JC-ID:', usuarioEncontrado.jcId);
+    console.log('============================');
 
     res.json({
       success: true,
@@ -135,7 +134,8 @@ exports.login = async (req, res) => {
         id: usuarioEncontrado._id,
         nombre: usuarioEncontrado.nombre,
         telefono: usuarioEncontrado.telefono,
-        usuario: usuarioEncontrado.usuario
+        usuario: usuarioEncontrado.usuario,
+        jcId: usuarioEncontrado.jcId
       }
     });
 
