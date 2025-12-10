@@ -32,6 +32,8 @@
 	<string>LaunchScreen</string>
 	<key>UIMainStoryboardFile</key>
 	<string>Main</string>
+	<key>NSContactsUsageDescription</key>
+<string>Necesitamos acceso a tus contactos para marcar contactos de emergencia</string>
 	<key>UISupportedInterfaceOrientations</key>
 	<array>
 		<string>UIInterfaceOrientationPortrait</string>
