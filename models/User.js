@@ -35,7 +35,6 @@ const userSchema = new mongoose.Schema({
   jcId: {
     type: String,
     unique: true,
-    required: true
   },
   // ✅ NUEVO: Rol del usuario
   rol: {

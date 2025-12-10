@@ -14,7 +14,7 @@ Future<Map<String, dynamic>> register({
   required String telefono,
   required String usuario,
   required String password,
-  String rol = 'dueño', // ✅ NUEVO parámetro
+  String rol = 'dueno', // ✅ NUEVO parámetro
 }) async {
   try {
     final response = await http.post(
