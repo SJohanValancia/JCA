@@ -1,39 +1,76 @@
-import 'dart:convert';
+import 'package:flutter_contacts/flutter_contacts.dart';
 import 'package:http/http.dart' as http;
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'package:contacts_service/contacts_service.dart';
-import 'package:permission_handler/permission_handler.dart';
+import 'dart:convert';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../models/emergency_contact_model.dart';
 
 class ContactService {
-  static const String baseUrl = 'https://jca-labd.onrender.com';
-  final storage = const FlutterSecureStorage();
-  static const Duration _timeout = Duration(seconds: 15);
-
-  Future<Map<String, String>> _getHeaders() async {
-    final token = await storage.read(key: 'token');
-    return {
-      'Content-Type': 'application/json',
-      'Authorization': 'Bearer $token',
-    };
-  }
+  // ✅ URL de producción de Render
+  static const String _baseUrl = 'https://jca-labd.onrender.com/api/contacts';
 
   // Solicitar permiso de contactos
   Future<bool> requestContactsPermission() async {
-    final status = await Permission.contacts.request();
-    return status.isGranted;
+    try {
+      return await FlutterContacts.requestPermission();
+    } catch (e) {
+      print('❌ Error solicitando permiso: $e');
+      return false;
+    }
   }
 
-  // Obtener todos los contactos del dispositivo
+  // Obtener contactos del dispositivo
   Future<List<Contact>> getDeviceContacts() async {
-    final hasPermission = await requestContactsPermission();
-    if (!hasPermission) return [];
-
     try {
-      final contacts = await ContactsService.getContacts();
-      return contacts.toList();
+      final hasPermission = await FlutterContacts.requestPermission();
+      if (!hasPermission) return [];
+
+      final contacts = await FlutterContacts.getContacts(
+        withProperties: true,
+        withPhoto: false,
+      );
+
+      print('📱 Contactos del dispositivo: ${contacts.length}');
+      return contacts;
     } catch (e) {
-      print('Error obteniendo contactos: $e');
+      print('❌ Error obteniendo contactos: $e');
+      return [];
+    }
+  }
+
+  // Obtener contactos de emergencia desde el backend
+  Future<List<EmergencyContact>> getEmergencyContacts() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('token');
+
+      if (token == null) {
+        print('❌ No hay token');
+        return [];
+      }
+
+      print('🔍 Obteniendo contactos de emergencia...');
+      final response = await http.get(
+        Uri.parse('$_baseUrl/emergency'),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+      );
+
+      print('📡 Status: ${response.statusCode}');
+      print('📦 Body: ${response.body}');
+
+      if (response.statusCode == 200) {
+        final Map<String, dynamic> data = json.decode(response.body);
+        final List<dynamic> contacts = data['emergencyContacts'] ?? [];
+        
+        print('✅ Contactos de emergencia: ${contacts.length}');
+        return contacts.map((json) => EmergencyContact.fromJson(json)).toList();
+      }
+
+      return [];
+    } catch (e) {
+      print('❌ Error obteniendo contactos de emergencia: $e');
       return [];
     }
   }
@@ -45,60 +82,36 @@ class ContactService {
     required bool isEmergency,
   }) async {
     try {
-      final headers = await _getHeaders();
-      
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('token');
+
+      if (token == null) {
+        print('❌ No hay token');
+        return false;
+      }
+
+      print('🔄 Toggle contacto: $name - $phoneNumber - isEmergency: $isEmergency');
+
       final response = await http.post(
-        Uri.parse('$baseUrl/api/contacts/emergency'),
-        headers: headers,
-        body: jsonEncode({
+        Uri.parse('$_baseUrl/emergency'),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+        body: json.encode({
           'name': name,
           'phoneNumber': phoneNumber,
           'isEmergency': isEmergency,
         }),
-      ).timeout(_timeout);
+      );
 
-      return response.statusCode == 200 || response.statusCode == 201;
+      print('📡 Status: ${response.statusCode}');
+      print('📦 Response: ${response.body}');
+
+      return response.statusCode == 201 || response.statusCode == 200;
+
     } catch (e) {
-      print('Error actualizando contacto de emergencia: $e');
-      return false;
-    }
-  }
-
-  // Obtener contactos de emergencia guardados
-  Future<List<EmergencyContact>> getEmergencyContacts() async {
-    try {
-      final headers = await _getHeaders();
-      
-      final response = await http.get(
-        Uri.parse('$baseUrl/api/contacts/emergency'),
-        headers: headers,
-      ).timeout(_timeout);
-
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        final List contacts = data['emergencyContacts'] ?? [];
-        return contacts.map((c) => EmergencyContact.fromJson(c)).toList();
-      }
-      return [];
-    } catch (e) {
-      print('Error obteniendo contactos de emergencia: $e');
-      return [];
-    }
-  }
-
-  // Eliminar contacto de emergencia
-  Future<bool> removeEmergencyContact(String contactId) async {
-    try {
-      final headers = await _getHeaders();
-      
-      final response = await http.delete(
-        Uri.parse('$baseUrl/api/contacts/emergency/$contactId'),
-        headers: headers,
-      ).timeout(_timeout);
-
-      return response.statusCode == 200;
-    } catch (e) {
-      print('Error eliminando contacto de emergencia: $e');
+      print('❌ Error toggling contacto: $e');
       return false;
     }
   }

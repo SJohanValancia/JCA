@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:contacts_service/contacts_service.dart';
+import 'package:flutter_contacts/flutter_contacts.dart';
 import '../services/contact_service.dart';
 import '../models/emergency_contact_model.dart';
 
@@ -63,8 +63,8 @@ class _EmergencyContactsScreenState extends State<EmergencyContactsScreen> {
     }
 
     final filtered = _allContacts.where((contact) {
-      final name = contact.displayName?.toLowerCase() ?? '';
-      final phones = contact.phones?.map((p) => p.value ?? '').join(' ') ?? '';
+      final name = contact.displayName.toLowerCase();
+      final phones = contact.phones.map((p) => p.number).join(' ');
       final searchLower = query.toLowerCase();
       
       return name.contains(searchLower) || phones.contains(searchLower);
@@ -76,8 +76,8 @@ class _EmergencyContactsScreenState extends State<EmergencyContactsScreen> {
   }
 
   bool _isEmergencyContact(Contact contact) {
-    final phone = contact.phones?.isNotEmpty == true 
-        ? contact.phones!.first.value?.replaceAll(RegExp(r'\D'), '') 
+    final phone = contact.phones.isNotEmpty
+        ? contact.phones.first.number.replaceAll(RegExp(r'\D'), '')
         : '';
     
     return _emergencyContacts.any((ec) => 
@@ -86,22 +86,29 @@ class _EmergencyContactsScreenState extends State<EmergencyContactsScreen> {
   }
 
   Future<void> _toggleEmergency(Contact contact) async {
-    final name = contact.displayName ?? 'Sin nombre';
-    final phone = contact.phones?.isNotEmpty == true 
-        ? contact.phones!.first.value ?? '' 
+    final name = contact.displayName.isNotEmpty 
+        ? contact.displayName 
+        : 'Sin nombre';
+    
+    final phone = contact.phones.isNotEmpty 
+        ? contact.phones.first.number
         : '';
 
     if (phone.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Este contacto no tiene número de teléfono'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Este contacto no tiene número de teléfono'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
       return;
     }
 
     final isCurrentlyEmergency = _isEmergencyContact(contact);
+    
+    print('🎯 Toggling: $name - isCurrently: $isCurrentlyEmergency -> ${!isCurrentlyEmergency}');
     
     final success = await _contactService.toggleEmergencyContact(
       name: name,
@@ -110,7 +117,9 @@ class _EmergencyContactsScreenState extends State<EmergencyContactsScreen> {
     );
 
     if (success && mounted) {
-      await _initialize(); // Recargar lista
+      // Recargar lista
+      await _initialize();
+      
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
@@ -119,6 +128,14 @@ class _EmergencyContactsScreenState extends State<EmergencyContactsScreen> {
                 : '✓ Contacto marcado como emergencia',
           ),
           backgroundColor: Colors.green,
+          duration: const Duration(seconds: 2),
+        ),
+      );
+    } else if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('❌ Error al actualizar contacto'),
+          backgroundColor: Colors.red,
         ),
       );
     }
@@ -273,9 +290,12 @@ class _EmergencyContactsScreenState extends State<EmergencyContactsScreen> {
   }
 
   Widget _buildContactCard(Contact contact, bool isEmergency) {
-    final name = contact.displayName ?? 'Sin nombre';
-    final phone = contact.phones?.isNotEmpty == true 
-        ? contact.phones!.first.value ?? 'Sin número' 
+    final name = contact.displayName.isNotEmpty 
+        ? contact.displayName 
+        : 'Sin nombre';
+    
+    final phone = contact.phones.isNotEmpty 
+        ? contact.phones.first.number
         : 'Sin número';
 
     return Container(
@@ -287,6 +307,15 @@ class _EmergencyContactsScreenState extends State<EmergencyContactsScreen> {
           color: isEmergency ? const Color(0xFFEF4444) : Colors.grey[200]!,
           width: isEmergency ? 2 : 1,
         ),
+        boxShadow: isEmergency 
+            ? [
+                BoxShadow(
+                  color: const Color(0xFFEF4444).withOpacity(0.2),
+                  blurRadius: 8,
+                  offset: const Offset(0, 2),
+                ),
+              ]
+            : null,
       ),
       child: ListTile(
         leading: CircleAvatar(
@@ -294,7 +323,7 @@ class _EmergencyContactsScreenState extends State<EmergencyContactsScreen> {
               ? const Color(0xFFEF4444) 
               : const Color(0xFF2563EB),
           child: Text(
-            name[0].toUpperCase(),
+            name.isNotEmpty ? name[0].toUpperCase() : '?',
             style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
           ),
         ),
@@ -333,6 +362,7 @@ class _EmergencyContactsScreenState extends State<EmergencyContactsScreen> {
           icon: Icon(
             isEmergency ? Icons.star : Icons.star_border,
             color: isEmergency ? const Color(0xFFEF4444) : Colors.grey,
+            size: 28,
           ),
           tooltip: isEmergency ? 'Quitar de emergencias' : 'Marcar como emergencia',
         ),
