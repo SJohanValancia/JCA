@@ -110,10 +110,13 @@ exports.getPendingRequests = async (req, res) => {
 };
 
 // Responder solicitud (aceptar/rechazar)
+// Responder solicitud (aceptar/rechazar)
 exports.respondToRequest = async (req, res) => {
   try {
     const { linkId, accept } = req.body;
     const userId = req.user.id;
+
+    console.log('🔔 Respondiendo solicitud:', { linkId, accept, userId });
 
     const link = await DeviceLink.findById(linkId);
     if (!link) {
@@ -131,13 +134,13 @@ exports.respondToRequest = async (req, res) => {
       });
     }
 
-    link.status = accept ? 'active' : 'rejected';
-    link.respondedAt = new Date();
-    await link.save();
-
-    // Si se acepta, crear vínculo bidireccional
     if (accept) {
-      // Verificar si ya existe el vínculo inverso
+      // ACEPTAR: Cambiar a active
+      link.status = 'active';
+      link.respondedAt = new Date();
+      await link.save();
+
+      // Crear vínculo bidireccional
       const reverseLink = await DeviceLink.findOne({
         userId: link.linkedUserId,
         linkedUserId: link.userId
@@ -151,7 +154,19 @@ exports.respondToRequest = async (req, res) => {
           respondedAt: new Date()
         });
         await bidirectionalLink.save();
+        console.log('✅ Vínculo bidireccional creado');
+      } else {
+        reverseLink.status = 'active';
+        reverseLink.respondedAt = new Date();
+        await reverseLink.save();
+        console.log('✅ Vínculo bidireccional actualizado');
       }
+
+      console.log('✅ Solicitud aceptada');
+    } else {
+      // RECHAZAR: Eliminar la solicitud completamente
+      await DeviceLink.deleteOne({ _id: linkId });
+      console.log('❌ Solicitud eliminada');
     }
 
     res.json({
@@ -160,7 +175,7 @@ exports.respondToRequest = async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Error respondiendo solicitud:', error);
+    console.error('❌ Error respondiendo solicitud:', error);
     res.status(500).json({
       success: false,
       message: 'Error en el servidor'

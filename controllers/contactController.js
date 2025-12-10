@@ -6,7 +6,8 @@ exports.toggleEmergencyContact = async (req, res) => {
     const { name, phoneNumber, isEmergency } = req.body;
     const userId = req.user.id;
 
-    // Validar datos
+    console.log('📞 Toggle contacto:', { name, phoneNumber, isEmergency, userId });
+
     if (!name || !phoneNumber) {
       return res.status(400).json({
         success: false,
@@ -14,7 +15,6 @@ exports.toggleEmergencyContact = async (req, res) => {
       });
     }
 
-    // Limpiar número de teléfono (quitar espacios, guiones, etc.)
     const cleanPhone = phoneNumber.replace(/\D/g, '');
 
     if (isEmergency) {
@@ -29,6 +29,8 @@ exports.toggleEmergencyContact = async (req, res) => {
         { upsert: true, new: true }
       );
 
+      console.log('✅ Contacto marcado como emergencia:', contact);
+
       return res.status(201).json({
         success: true,
         message: 'Contacto marcado como emergencia',
@@ -36,7 +38,9 @@ exports.toggleEmergencyContact = async (req, res) => {
       });
     } else {
       // Eliminar contacto de emergencias
-      await EmergencyContact.deleteOne({ userId, phoneNumber: cleanPhone });
+      const result = await EmergencyContact.deleteOne({ userId, phoneNumber: cleanPhone });
+      
+      console.log('🗑️ Contacto eliminado:', result);
 
       return res.json({
         success: true,
@@ -45,9 +49,8 @@ exports.toggleEmergencyContact = async (req, res) => {
     }
 
   } catch (error) {
-    console.error('Error en toggleEmergencyContact:', error);
+    console.error('❌ Error en toggleEmergencyContact:', error);
     
-    // Manejar error de duplicado
     if (error.code === 11000) {
       return res.status(400).json({
         success: false,
@@ -72,13 +75,15 @@ exports.getEmergencyContacts = async (req, res) => {
       isEmergency: true 
     }).sort({ createdAt: -1 });
 
+    console.log(`📋 Contactos de emergencia encontrados: ${contacts.length}`);
+
     res.json({
       success: true,
       emergencyContacts: contacts
     });
 
   } catch (error) {
-    console.error('Error obteniendo contactos de emergencia:', error);
+    console.error('❌ Error obteniendo contactos:', error);
     res.status(500).json({
       success: false,
       message: 'Error en el servidor'
@@ -150,7 +155,6 @@ exports.findEmergencyContactByPhone = async (req, res) => {
     const { phoneNumber } = req.params;
     const userId = req.user.id;
 
-    // Limpiar número
     const cleanPhone = phoneNumber.replace(/\D/g, '');
 
     const contact = await EmergencyContact.findOne({ 
