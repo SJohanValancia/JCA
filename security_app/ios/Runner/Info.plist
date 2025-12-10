@@ -34,6 +34,10 @@
 	<string>Main</string>
 	<key>NSContactsUsageDescription</key>
 <string>Necesitamos acceso a tus contactos para marcar contactos de emergencia</string>
+<key>NSCameraUsageDescription</key>
+<string>Necesitamos acceso a la cámara para escanear códigos QR</string>
+<key>NSContactsUsageDescription</key>
+<string>Necesitamos acceso a tus contactos para marcar contactos de emergencia</string>
 	<key>UISupportedInterfaceOrientations</key>
 	<array>
 		<string>UIInterfaceOrientationPortrait</string>

@@ -21,9 +21,10 @@ dependencies:
   latlong2: ^0.9.0
   url_launcher: ^6.2.2
   battery_plus: ^5.0.2
-  flutter_contacts: ^1.1.9  # ✅ NUEVO (reemplaza contacts_service)
+  flutter_contacts: ^1.1.9
+  qr_flutter: ^4.1.0  # ✅ Para generar QR
+  mobile_scanner: ^3.5.5  # ✅ Para escanear QR
 
-  
 dev_dependencies:
   flutter_test:
     sdk: flutter

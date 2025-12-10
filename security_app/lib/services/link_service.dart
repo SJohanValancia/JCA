@@ -9,7 +9,6 @@ class LinkService {
   final storage = const FlutterSecureStorage();
   static const Duration _timeout = Duration(seconds: 15);
 
-  // Obtener headers con token
   Future<Map<String, String>> _getHeaders() async {
     final token = await storage.read(key: 'token');
     return {
@@ -18,16 +17,20 @@ class LinkService {
     };
   }
 
-  // Enviar solicitud de vinculación
   Future<Map<String, dynamic>> sendLinkRequest(String jcId) async {
     try {
       final headers = await _getHeaders();
+      
+      print('📤 Enviando solicitud a: $jcId');
       
       final response = await http.post(
         Uri.parse('$baseUrl/api/link/request'),
         headers: headers,
         body: jsonEncode({'jcId': jcId}),
       ).timeout(_timeout);
+
+      print('📡 Status: ${response.statusCode}');
+      print('📦 Response: ${response.body}');
 
       final data = jsonDecode(response.body);
 
@@ -44,7 +47,7 @@ class LinkService {
         };
       }
     } catch (e) {
-      print('Error enviando solicitud: $e');
+      print('❌ Error enviando solicitud: $e');
       return {
         'success': false,
         'message': 'Error de conexión'
@@ -52,7 +55,6 @@ class LinkService {
     }
   }
 
-  // Obtener solicitudes pendientes
   Future<List<LinkRequest>> getPendingRequests() async {
     try {
       final headers = await _getHeaders();
@@ -62,22 +64,30 @@ class LinkService {
         headers: headers,
       ).timeout(_timeout);
 
+      print('📋 Pending requests status: ${response.statusCode}');
+      print('📋 Pending requests body: ${response.body}');
+
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         final List requests = data['requests'] ?? [];
+        
+        print('✅ Solicitudes pendientes: ${requests.length}');
+        
         return requests.map((r) => LinkRequest.fromJson(r)).toList();
       }
       return [];
     } catch (e) {
-      print('Error obteniendo solicitudes: $e');
+      print('❌ Error obteniendo solicitudes: $e');
       return [];
     }
   }
 
-  // Responder a solicitud (aceptar/rechazar)
+  // ✅ ARREGLADO: Responder a solicitud
   Future<bool> respondToRequest(String linkId, bool accept) async {
     try {
       final headers = await _getHeaders();
+      
+      print('🔄 Respondiendo solicitud: $linkId - accept: $accept');
       
       final response = await http.post(
         Uri.parse('$baseUrl/api/link/respond'),
@@ -88,14 +98,17 @@ class LinkService {
         }),
       ).timeout(_timeout);
 
+      print('📡 Status: ${response.statusCode}');
+      print('📦 Response: ${response.body}');
+
       return response.statusCode == 200;
     } catch (e) {
-      print('Error respondiendo solicitud: $e');
+      print('❌ Error respondiendo solicitud: $e');
       return false;
     }
   }
 
-  // Obtener dispositivos vinculados
+  // ✅ ARREGLADO: Obtener dispositivos vinculados
   Future<List<LinkedUserModel>> getLinkedDevices() async {
     try {
       final headers = await _getHeaders();
@@ -105,19 +118,33 @@ class LinkService {
         headers: headers,
       ).timeout(_timeout);
 
+      print('📱 Linked devices status: ${response.statusCode}');
+      print('📱 Linked devices body: ${response.body}');
+
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         final List devices = data['linkedDevices'] ?? [];
-        return devices.map((d) => LinkedUserModel.fromJson(d['linkedUserId'])).toList();
+        
+        print('✅ Dispositivos vinculados: ${devices.length}');
+        
+        // ✅ IMPORTANTE: Mapear correctamente desde linkedUserId
+        return devices.map((d) {
+          final linkedUser = d['linkedUserId'];
+          return LinkedUserModel(
+            id: linkedUser['_id'] ?? '',
+            nombre: linkedUser['nombre'] ?? '',
+            usuario: linkedUser['usuario'] ?? '',
+            jcId: linkedUser['jcId'] ?? '',
+          );
+        }).toList();
       }
       return [];
     } catch (e) {
-      print('Error obteniendo dispositivos: $e');
+      print('❌ Error obteniendo dispositivos: $e');
       return [];
     }
   }
 
-  // Actualizar ubicación
   Future<bool> updateLocation({
     required double latitude,
     required double longitude,
@@ -144,12 +171,11 @@ class LinkService {
 
       return response.statusCode == 200;
     } catch (e) {
-      print('Error actualizando ubicación: $e');
+      print('❌ Error actualizando ubicación: $e');
       return false;
     }
   }
 
-  // Obtener ubicaciones de dispositivos vinculados
   Future<List<LinkedUserModel>> getLinkedLocations() async {
     try {
       final headers = await _getHeaders();
@@ -166,12 +192,11 @@ class LinkService {
       }
       return [];
     } catch (e) {
-      print('Error obteniendo ubicaciones: $e');
+      print('❌ Error obteniendo ubicaciones: $e');
       return [];
     }
   }
 
-  // Desvincular dispositivo
   Future<bool> unlinkDevice(String linkedUserId) async {
     try {
       final headers = await _getHeaders();
@@ -184,7 +209,7 @@ class LinkService {
 
       return response.statusCode == 200;
     } catch (e) {
-      print('Error desvinculando: $e');
+      print('❌ Error desvinculando: $e');
       return false;
     }
   }

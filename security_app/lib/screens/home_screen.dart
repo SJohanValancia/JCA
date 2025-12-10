@@ -10,9 +10,9 @@ import 'map_screen.dart';
 import 'login_screen.dart';
 import 'linked_devices_screen.dart';
 import 'emergency_contacts_screen.dart';
+import 'qr_scanner_screen.dart';
+import 'qr_display_screen.dart';
 import 'dart:async';
-
-
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -30,7 +30,7 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _isLoading = true;
   List<LinkRequest> _pendingRequests = [];
   Timer? _requestCheckTimer;
-  bool _isDialogOpen = false; // ✅ MOVERLA AQUÍ ADENTRO
+  bool _isDialogOpen = false;
 
   @override
   void initState() {
@@ -62,43 +62,133 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-Future<void> _checkPendingRequests() async {
-  // No verificar si hay un diálogo abierto
-  if (_isDialogOpen) return;
-  
-  final requests = await _linkService.getPendingRequests();
-  if (mounted) {
-    setState(() {
-      _pendingRequests = requests;
-    });
+  Future<void> _checkPendingRequests() async {
+    if (_isDialogOpen) return;
     
-    // Solo mostrar si hay solicitudes y no hay diálogo abierto
-    if (requests.isNotEmpty && !_isDialogOpen) {
-      _isDialogOpen = true;
-      _showLinkRequestDialog(requests.first);
+    final requests = await _linkService.getPendingRequests();
+    if (mounted) {
+      setState(() {
+        _pendingRequests = requests;
+      });
+      
+      if (requests.isNotEmpty && !_isDialogOpen) {
+        _isDialogOpen = true;
+        _showLinkRequestDialog(requests.first);
+      }
     }
   }
-}
+
 void _showLinkRequestDialog(LinkRequest request) {
-  // Verificar si el diálogo ya está abierto
   if (_pendingRequests.isEmpty) return;
   
   showDialog(
     context: context,
     barrierDismissible: false,
     builder: (context) => AlertDialog(
-      // ... mismo contenido ...
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(20),
+      ),
+      title: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: const Color(0xFF2563EB).withOpacity(0.1),
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(
+              Icons.person_add,
+              color: Color(0xFF2563EB),
+              size: 24,
+            ),
+          ),
+          const SizedBox(width: 12),
+          const Expanded(
+            child: Text(
+              'Solicitud de Vinculación',
+              style: TextStyle(fontSize: 18),
+            ),
+          ),
+        ],
+      ),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            request.nombre,
+            style: const TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            decoration: BoxDecoration(
+              color: Colors.grey[200],
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Text(
+              request.jcId,
+              style: const TextStyle(
+                fontFamily: 'monospace',
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          const Text(
+            'quiere vincularse contigo para compartir ubicaciones en tiempo real.',
+            style: TextStyle(fontSize: 15),
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            '¿Aceptas?',
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
       actions: [
         TextButton(
           onPressed: () async {
-            setState(() => _isDialogOpen = false); // ✅
             Navigator.pop(context);
-            await _linkService.respondToRequest(request.id, false);
-            setState(() {
-              _pendingRequests.removeWhere((r) => r.id == request.id);
-            });
-            if (_pendingRequests.isNotEmpty) {
-              _showLinkRequestDialog(_pendingRequests.first);
+            
+            // Mostrar loading
+            showDialog(
+              context: context,
+              barrierDismissible: false,
+              builder: (ctx) => const Center(child: CircularProgressIndicator()),
+            );
+            
+            final success = await _linkService.respondToRequest(request.id, false);
+            
+            if (mounted) {
+              Navigator.pop(context); // Cerrar loading
+              
+              if (success) {
+                setState(() {
+                  _isDialogOpen = false;
+                  _pendingRequests.removeWhere((r) => r.id == request.id);
+                });
+                
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('❌ Solicitud rechazada'),
+                    backgroundColor: Colors.orange,
+                  ),
+                );
+                
+                // Mostrar siguiente solicitud si existe
+                if (_pendingRequests.isNotEmpty) {
+                  Future.delayed(const Duration(milliseconds: 500), () {
+                    if (mounted) _showLinkRequestDialog(_pendingRequests.first);
+                  });
+                }
+              }
             }
           },
           child: const Text(
@@ -108,22 +198,48 @@ void _showLinkRequestDialog(LinkRequest request) {
         ),
         ElevatedButton(
           onPressed: () async {
-            setState(() => _isDialogOpen = false); // ✅
             Navigator.pop(context);
+            
+            // Mostrar loading
+            showDialog(
+              context: context,
+              barrierDismissible: false,
+              builder: (ctx) => const Center(child: CircularProgressIndicator()),
+            );
+            
             final success = await _linkService.respondToRequest(request.id, true);
-            if (success && mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('✓ Dispositivo vinculado exitosamente'),
-                  backgroundColor: Colors.green,
-                ),
-              );
-            }
-            setState(() {
-              _pendingRequests.removeWhere((r) => r.id == request.id);
-            });
-            if (_pendingRequests.isNotEmpty) {
-              _showLinkRequestDialog(_pendingRequests.first);
+            
+            if (mounted) {
+              Navigator.pop(context); // Cerrar loading
+              
+              if (success) {
+                setState(() {
+                  _isDialogOpen = false;
+                  _pendingRequests.removeWhere((r) => r.id == request.id);
+                });
+                
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('✓ ${request.nombre} vinculado exitosamente'),
+                    backgroundColor: Colors.green,
+                    duration: const Duration(seconds: 3),
+                  ),
+                );
+                
+                // Mostrar siguiente solicitud si existe
+                if (_pendingRequests.isNotEmpty) {
+                  Future.delayed(const Duration(milliseconds: 500), () {
+                    if (mounted) _showLinkRequestDialog(_pendingRequests.first);
+                  });
+                }
+              } else {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('❌ Error al vincular'),
+                    backgroundColor: Colors.red,
+                  ),
+                );
+              }
             }
           },
           style: ElevatedButton.styleFrom(
@@ -136,125 +252,78 @@ void _showLinkRequestDialog(LinkRequest request) {
     ),
   );
 }
-  void _showLinkDeviceDialog() {
-    final jcIdController = TextEditingController();
-
-    showDialog(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(20),
-        ),
-        title: const Row(
-          children: [
-            Icon(Icons.add_link, color: Color(0xFF2563EB), size: 28),
-            SizedBox(width: 12),
-            Text('Unir Dispositivo'),
-          ],
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text(
-              'Escribe aquí el JC-ID para unir a otro usuario de JCA',
-              style: TextStyle(fontSize: 14),
-            ),
-            const SizedBox(height: 20),
-            TextField(
-              controller: jcIdController,
-              decoration: InputDecoration(
-                labelText: 'JC-ID',
-                hintText: 'JC12345678',
-                prefixIcon: const Icon(Icons.badge),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-              ),
-              textCapitalization: TextCapitalization.characters,
-              maxLength: 10,
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('Cancelar'),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              final jcId = jcIdController.text.trim().toUpperCase();
-              
-              if (jcId.isEmpty) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Ingresa un JC-ID')),
-                );
-                return;
-              }
-
-              // Cerrar el diálogo del input PRIMERO
-              Navigator.pop(dialogContext);
-
-              // Mostrar loading
-              showDialog(
-                context: context,
-                barrierDismissible: false,
-                builder: (loadingContext) => const Center(
-                  child: CircularProgressIndicator(),
-                ),
-              );
-
-              final result = await _linkService.sendLinkRequest(jcId);
-
-              // Cerrar loading
-              if (mounted) {
-                Navigator.of(context, rootNavigator: true).pop();
-
-                if (result['success']) {
-                  showDialog(
-                    context: context,
-                    builder: (successContext) => AlertDialog(
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      title: const Row(
-                        children: [
-                          Icon(Icons.check_circle, color: Colors.green, size: 28),
-                          SizedBox(width: 12),
-                          Text('Solicitud Enviada'),
-                        ],
-                      ),
-                      content: Text(
-                        'Solicitud enviada a ${result['targetUser']['nombre']}.\n\n'
-                        'Espera a que acepte la vinculación.',
-                        style: const TextStyle(fontSize: 15),
-                      ),
-                      actions: [
-                        TextButton(
-                          onPressed: () => Navigator.pop(successContext),
-                          child: const Text('Entendido'),
-                        ),
-                      ],
-                    ),
-                  );
-                } else {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text(result['message']),
-                      backgroundColor: Colors.red,
-                    ),
-                  );
-                }
-              }
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF2563EB),
-              foregroundColor: Colors.white,
-            ),
-            child: const Text('Unir'),
-          ),
-        ],
+  // ✅ NUEVO: Escanear QR para vincular
+  Future<void> _scanQRToLink() async {
+    final scannedData = await Navigator.push<String>(
+      context,
+      MaterialPageRoute(
+        builder: (context) => const QRScannerScreen(),
       ),
     );
+
+    if (scannedData == null || !mounted) return;
+
+    // Validar que sea un JC-ID válido
+    if (!scannedData.startsWith('JC')) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('❌ Código QR inválido'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    // Mostrar loading
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (loadingContext) => const Center(
+        child: CircularProgressIndicator(),
+      ),
+    );
+
+    final result = await _linkService.sendLinkRequest(scannedData);
+
+    if (mounted) {
+      Navigator.of(context, rootNavigator: true).pop();
+
+      if (result['success']) {
+        showDialog(
+          context: context,
+          builder: (successContext) => AlertDialog(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20),
+            ),
+            title: const Row(
+              children: [
+                Icon(Icons.check_circle, color: Colors.green, size: 28),
+                SizedBox(width: 12),
+                Text('Solicitud Enviada'),
+              ],
+            ),
+            content: Text(
+              'Solicitud enviada a ${result['targetUser']['nombre']}.\n\n'
+              'Espera a que acepte la vinculación.',
+              style: const TextStyle(fontSize: 15),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(successContext),
+                child: const Text('Entendido'),
+              ),
+            ],
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(result['message']),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 
   void _showReportDialog() {
@@ -381,15 +450,17 @@ void _showLinkRequestDialog(LinkRequest request) {
             ],
           ),
           const SizedBox(height: 12),
+          // ✅ CAMBIO: QR en lugar de copiar ID
           GestureDetector(
             onTap: () {
               if (_currentUser?.jcId != null && _currentUser!.jcId.isNotEmpty) {
-                Clipboard.setData(ClipboardData(text: _currentUser!.jcId));
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('✓ JC-ID copiado al portapapeles'),
-                    duration: Duration(seconds: 2),
-                    backgroundColor: Colors.green,
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => QRDisplayScreen(
+                      jcId: _currentUser!.jcId,
+                      nombre: _currentUser!.nombre,
+                    ),
                   ),
                 );
               }
@@ -403,7 +474,7 @@ void _showLinkRequestDialog(LinkRequest request) {
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Icon(Icons.badge, color: Colors.white, size: 18),
+                  const Icon(Icons.qr_code, color: Colors.white, size: 20),
                   const SizedBox(width: 8),
                   Text(
                     'ID: ${_currentUser?.jcId ?? "N/A"}',
@@ -415,7 +486,7 @@ void _showLinkRequestDialog(LinkRequest request) {
                     ),
                   ),
                   const SizedBox(width: 8),
-                  const Icon(Icons.copy, color: Colors.white70, size: 16),
+                  const Icon(Icons.touch_app, color: Colors.white70, size: 16),
                 ],
               ),
             ),
@@ -470,80 +541,81 @@ void _showLinkRequestDialog(LinkRequest request) {
     );
   }
 
-Widget _buildOptionsGrid() {
-  return Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      const Text(
-        'Opciones Rápidas',
-        style: TextStyle(
-          fontSize: 22,
-          fontWeight: FontWeight.bold,
-          color: Color(0xFF1E293B),
+  Widget _buildOptionsGrid() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Opciones Rápidas',
+          style: TextStyle(
+            fontSize: 22,
+            fontWeight: FontWeight.bold,
+            color: Color(0xFF1E293B),
+          ),
         ),
-      ),
-      const SizedBox(height: 20),
-      GridView.count(
-        shrinkWrap: true,
-        physics: const NeverScrollableScrollPhysics(),
-        crossAxisCount: 2,
-        crossAxisSpacing: 16,
-        mainAxisSpacing: 16,
-        childAspectRatio: 1.1,
-        children: [
-          _buildOptionCard(
-            icon: Icons.map_outlined,
-            title: 'Mapa',
-            subtitle: 'Ver ubicación',
-            color: const Color(0xFF2563EB),
-            onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) => const MapScreen()),
-              );
-            },
-          ),
-          _buildOptionCard(
-            icon: Icons.add_link,
-            title: 'Unir',
-            subtitle: 'Vincular dispositivo',
-            color: const Color(0xFF10B981),
-            badge: _pendingRequests.isNotEmpty ? _pendingRequests.length : null,
-            onTap: _showLinkDeviceDialog,
-          ),
-          _buildOptionCard(
-            icon: Icons.people_outlined,
-            title: 'Vinculados',
-            subtitle: 'Dispositivos',
-            color: const Color(0xFF8B5CF6),
-            onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => const LinkedDevicesScreen(),
-                ),
-              );
-            },
-          ),
-          _buildOptionCard(
-            icon: Icons.contacts_outlined,
-            title: 'Emergencias',
-            subtitle: 'Contactos',
-            color: const Color(0xFFEF4444),
-            onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => const EmergencyContactsScreen(),
-                ),
-              );
-            },
-          ),
-        ],
-      ),
-    ],
-  );
-}
+        const SizedBox(height: 20),
+        GridView.count(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          crossAxisCount: 2,
+          crossAxisSpacing: 16,
+          mainAxisSpacing: 16,
+          childAspectRatio: 1.1,
+          children: [
+            _buildOptionCard(
+              icon: Icons.map_outlined,
+              title: 'Mapa',
+              subtitle: 'Ver ubicación',
+              color: const Color(0xFF2563EB),
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => const MapScreen()),
+                );
+              },
+            ),
+            _buildOptionCard(
+              icon: Icons.qr_code_scanner,
+              title: 'Escanear',
+              subtitle: 'Vincular con QR',
+              color: const Color(0xFF10B981),
+              badge: _pendingRequests.isNotEmpty ? _pendingRequests.length : null,
+              onTap: _scanQRToLink,
+            ),
+            _buildOptionCard(
+              icon: Icons.people_outlined,
+              title: 'Vinculados',
+              subtitle: 'Dispositivos',
+              color: const Color(0xFF8B5CF6),
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const LinkedDevicesScreen(),
+                  ),
+                );
+              },
+            ),
+            _buildOptionCard(
+              icon: Icons.contacts_outlined,
+              title: 'Emergencias',
+              subtitle: 'Contactos',
+              color: const Color(0xFFEF4444),
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const EmergencyContactsScreen(),
+                  ),
+                );
+              },
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
   Widget _buildOptionCard({
     required IconData icon,
     required String title,
