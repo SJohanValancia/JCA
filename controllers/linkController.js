@@ -26,27 +26,37 @@ exports.sendLinkRequest = async (req, res) => {
       });
     }
 
-    // Verificar si ya existe una solicitud
-    const existingLink = await DeviceLink.findOne({
-      $or: [
-        { userId, linkedUserId: targetUser._id },
-        { userId: targetUser._id, linkedUserId: userId }
-      ]
-    });
+// Eliminar solicitudes rechazadas antiguas
+await DeviceLink.deleteMany({
+  $or: [
+    { userId, linkedUserId: targetUser._id },
+    { userId: targetUser._id, linkedUserId: userId }
+  ],
+  status: 'rejected'
+});
 
-    if (existingLink) {
-      if (existingLink.status === 'active') {
-        return res.status(400).json({
-          success: false,
-          message: 'Ya están vinculados'
-        });
-      } else if (existingLink.status === 'pending') {
-        return res.status(400).json({
-          success: false,
-          message: 'Ya existe una solicitud pendiente'
-        });
-      }
-    }
+// Verificar si ya existe una solicitud activa o pendiente
+const existingLink = await DeviceLink.findOne({
+  $or: [
+    { userId, linkedUserId: targetUser._id },
+    { userId: targetUser._id, linkedUserId: userId }
+  ],
+  status: { $in: ['active', 'pending'] }
+});
+
+if (existingLink) {
+  if (existingLink.status === 'active') {
+    return res.status(400).json({
+      success: false,
+      message: 'Ya están vinculados'
+    });
+  } else if (existingLink.status === 'pending') {
+    return res.status(400).json({
+      success: false,
+      message: 'Ya existe una solicitud pendiente'
+    });
+  }
+}
 
     // Crear solicitud de vinculación
     const newLink = new DeviceLink({
