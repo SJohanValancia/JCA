@@ -1,3 +1,4 @@
+// authController.js
 const User = require('../models/User');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
@@ -5,7 +6,7 @@ const jwt = require('jsonwebtoken');
 // Registro de usuario
 exports.registro = async (req, res) => {
   try {
-    const { nombre, telefono, usuario, password } = req.body;
+    const { nombre, telefono, usuario, password, rol } = req.body;
 
     if (!nombre || !telefono || !usuario || !password) {
       return res.status(400).json({ 
@@ -25,6 +26,14 @@ exports.registro = async (req, res) => {
       return res.status(400).json({ 
         success: false,
         message: 'El usuario no puede contener el símbolo @' 
+      });
+    }
+
+    // ✅ Validar rol
+    if (rol && !['dueno', 'vendedor'].includes(rol)) {
+      return res.status(400).json({ 
+        success: false,
+        message: 'Rol inválido' 
       });
     }
 
@@ -51,7 +60,8 @@ exports.registro = async (req, res) => {
       nombre,
       telefono,
       usuario: usuario.toLowerCase(),
-      password: passwordHash
+      password: passwordHash,
+      rol: rol || 'dueno'
     });
 
     await nuevoUsuario.save();
@@ -71,7 +81,9 @@ exports.registro = async (req, res) => {
         nombre: nuevoUsuario.nombre,
         telefono: nuevoUsuario.telefono,
         usuario: nuevoUsuario.usuario,
-        jcId: nuevoUsuario.jcId // 🆕 Incluir JC-ID
+        jcId: nuevoUsuario.jcId,
+        rol: nuevoUsuario.rol,
+        deudaInfo: nuevoUsuario.deudaInfo
       }
     });
 
@@ -84,7 +96,6 @@ exports.registro = async (req, res) => {
   }
 };
 
-// Login de usuario
 // Login de usuario
 exports.login = async (req, res) => {
   try {
@@ -119,11 +130,11 @@ exports.login = async (req, res) => {
       { expiresIn: '30d' }
     );
 
-    // ✅ AGREGA ESTAS LÍNEAS AQUÍ
     console.log('===== USUARIO ENCONTRADO =====');
     console.log('ID:', usuarioEncontrado._id);
     console.log('Nombre:', usuarioEncontrado.nombre);
     console.log('JC-ID:', usuarioEncontrado.jcId);
+    console.log('Rol:', usuarioEncontrado.rol);
     console.log('============================');
 
     res.json({
@@ -135,7 +146,9 @@ exports.login = async (req, res) => {
         nombre: usuarioEncontrado.nombre,
         telefono: usuarioEncontrado.telefono,
         usuario: usuarioEncontrado.usuario,
-        jcId: usuarioEncontrado.jcId
+        jcId: usuarioEncontrado.jcId,
+        rol: usuarioEncontrado.rol,
+        deudaInfo: usuarioEncontrado.deudaInfo
       }
     });
 

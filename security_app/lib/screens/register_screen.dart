@@ -10,6 +10,7 @@ class RegisterScreen extends StatefulWidget {
 }
 
 class _RegisterScreenState extends State<RegisterScreen> {
+  
   final _formKey = GlobalKey<FormState>();
   final _nombreController = TextEditingController();
   final _telefonoController = TextEditingController();
@@ -38,6 +39,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
       telefono: _telefonoController.text.trim(),
       usuario: _usuarioController.text.trim(),
       password: _passwordController.text,
+      rol: _selectedRol,
+      
     );
 
     if (!mounted) return;
@@ -164,6 +167,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                                 },
                               ),
                               const SizedBox(height: 16),
+                              _buildRolSelector(),
                               _buildTextField(
                                 controller: _telefonoController,
                                 label: 'Teléfono',
@@ -296,6 +300,85 @@ class _RegisterScreenState extends State<RegisterScreen> {
       ),
     );
   }
+
+
+String _selectedRol = 'dueño';
+
+Widget _buildRolSelector() {
+  return Container(
+    padding: const EdgeInsets.all(16),
+    decoration: BoxDecoration(
+      color: Colors.grey[50],
+      borderRadius: BorderRadius.circular(16),
+      border: Border.all(color: Colors.grey[300]!),
+    ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Icon(Icons.badge_outlined, color: const Color(0xFF2563EB)),
+            const SizedBox(width: 8),
+            const Text(
+              'Tipo de cuenta',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Expanded(
+              child: _buildRolOption('dueño', Icons.person, 'Dueño'),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: _buildRolOption('vendedor', Icons.shopping_bag, 'Vendedor'),
+            ),
+          ],
+        ),
+      ],
+    ),
+  );
+}
+
+Widget _buildRolOption(String value, IconData icon, String label) {
+  final isSelected = _selectedRol == value;
+  return InkWell(
+    onTap: () => setState(() => _selectedRol = value),
+    child: Container(
+      padding: const EdgeInsets.symmetric(vertical: 12),
+      decoration: BoxDecoration(
+        color: isSelected ? const Color(0xFF2563EB) : Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: isSelected ? const Color(0xFF2563EB) : Colors.grey[300]!,
+          width: 2,
+        ),
+      ),
+      child: Column(
+        children: [
+          Icon(
+            icon,
+            color: isSelected ? Colors.white : Colors.grey[600],
+            size: 28,
+          ),
+          const SizedBox(height: 4),
+          Text(
+            label,
+            style: TextStyle(
+              color: isSelected ? Colors.white : Colors.grey[800],
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
+    ),
+  );
+}
 
   Widget _buildTextField({
     required TextEditingController controller,

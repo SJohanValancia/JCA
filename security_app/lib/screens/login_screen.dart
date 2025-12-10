@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import '../models/user_model.dart';
 import '../services/auth_service.dart';
 import 'register_screen.dart';
 import 'home_screen.dart';
+import 'vendor_home_screen.dart'; // ✅ AÑADIR IMPORT
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -40,6 +42,8 @@ class _LoginScreenState extends State<LoginScreen> {
     setState(() => _isLoading = false);
 
     if (result['success']) {
+      final user = result['user'] as UserModel; // ✅ OBTENER USER
+      
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(result['message']),
@@ -47,9 +51,15 @@ class _LoginScreenState extends State<LoginScreen> {
           behavior: SnackBarBehavior.floating,
         ),
       );
+      
+      // ✅ REDIRIGIR SEGÚN ROL
       Navigator.pushReplacement(
         context,
-        MaterialPageRoute(builder: (context) => const HomeScreen()),
+        MaterialPageRoute(
+          builder: (context) => user.isVendedor 
+              ? const VendorHomeScreen() 
+              : const HomeScreen(),
+        ),
       );
     } else {
       ScaffoldMessenger.of(context).showSnackBar(

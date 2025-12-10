@@ -24,6 +24,7 @@ dependencies:
   flutter_contacts: ^1.1.9
   qr_flutter: ^4.1.0  # ✅ Para generar QR
   mobile_scanner: ^3.5.5  # ✅ Para escanear QR
+  intl: ^0.18.1
 
 dev_dependencies:
   flutter_test:

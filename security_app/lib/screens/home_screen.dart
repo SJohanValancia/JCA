@@ -13,6 +13,7 @@ import 'emergency_contacts_screen.dart';
 import 'qr_scanner_screen.dart';
 import 'qr_display_screen.dart';
 import 'dart:async';
+import 'vendor_home_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -39,17 +40,27 @@ class _HomeScreenState extends State<HomeScreen> {
     _startRequestChecker();
   }
 
-  Future<void> _initializeApp() async {
-    _currentUser = await _authService.getUser();
-    
-    if (mounted) {
-      setState(() => _isLoading = false);
-    }
-
-    _backgroundTasks();
-    _checkPendingRequests();
+Future<void> _initializeApp() async {
+  _currentUser = await _authService.getUser();
+  
+  // ✅ Redirigir si es vendedor
+  if (_currentUser?.isVendedor == true && mounted) {
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(
+        builder: (context) => const VendorHomeScreen(),
+      ),
+    );
+    return;
+  }
+  
+  if (mounted) {
+    setState(() => _isLoading = false);
   }
 
+  _backgroundTasks();
+  _checkPendingRequests();
+}
   void _backgroundTasks() {
     _deviceService.saveDeviceToBackend();
     _permissionService.requestPermissions(context);
@@ -84,7 +95,7 @@ void _showLinkRequestDialog(LinkRequest request) {
   showDialog(
     context: context,
     barrierDismissible: false,
-    builder: (context) => AlertDialog(
+    builder: (dialogContext) => AlertDialog(
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(20),
       ),
@@ -155,19 +166,25 @@ void _showLinkRequestDialog(LinkRequest request) {
       actions: [
         TextButton(
           onPressed: () async {
-            Navigator.pop(context);
+            // ✅ Cerrar diálogo principal primero
+            Navigator.of(dialogContext).pop();
             
-            // Mostrar loading
+            // ✅ Mostrar loading en el scaffold context
+            if (!mounted) return;
             showDialog(
               context: context,
               barrierDismissible: false,
-              builder: (ctx) => const Center(child: CircularProgressIndicator()),
+              builder: (loadingContext) => WillPopScope(
+                onWillPop: () async => false,
+                child: const Center(child: CircularProgressIndicator()),
+              ),
             );
             
             final success = await _linkService.respondToRequest(request.id, false);
             
+            // ✅ Cerrar loading de forma segura
             if (mounted) {
-              Navigator.pop(context); // Cerrar loading
+              Navigator.of(context, rootNavigator: true).pop();
               
               if (success) {
                 setState(() {
@@ -184,9 +201,8 @@ void _showLinkRequestDialog(LinkRequest request) {
                 
                 // Mostrar siguiente solicitud si existe
                 if (_pendingRequests.isNotEmpty) {
-                  Future.delayed(const Duration(milliseconds: 500), () {
-                    if (mounted) _showLinkRequestDialog(_pendingRequests.first);
-                  });
+                  await Future.delayed(const Duration(milliseconds: 500));
+                  if (mounted) _showLinkRequestDialog(_pendingRequests.first);
                 }
               }
             }
@@ -198,19 +214,25 @@ void _showLinkRequestDialog(LinkRequest request) {
         ),
         ElevatedButton(
           onPressed: () async {
-            Navigator.pop(context);
+            // ✅ Cerrar diálogo principal primero
+            Navigator.of(dialogContext).pop();
             
-            // Mostrar loading
+            // ✅ Mostrar loading en el scaffold context
+            if (!mounted) return;
             showDialog(
               context: context,
               barrierDismissible: false,
-              builder: (ctx) => const Center(child: CircularProgressIndicator()),
+              builder: (loadingContext) => WillPopScope(
+                onWillPop: () async => false,
+                child: const Center(child: CircularProgressIndicator()),
+              ),
             );
             
             final success = await _linkService.respondToRequest(request.id, true);
             
+            // ✅ Cerrar loading de forma segura
             if (mounted) {
-              Navigator.pop(context); // Cerrar loading
+              Navigator.of(context, rootNavigator: true).pop();
               
               if (success) {
                 setState(() {
@@ -220,7 +242,7 @@ void _showLinkRequestDialog(LinkRequest request) {
                 
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(
-                    content: Text('✓ ${request.nombre} vinculado exitosamente'),
+                    content: Text('✅ ${request.nombre} vinculado exitosamente'),
                     backgroundColor: Colors.green,
                     duration: const Duration(seconds: 3),
                   ),
@@ -228,9 +250,8 @@ void _showLinkRequestDialog(LinkRequest request) {
                 
                 // Mostrar siguiente solicitud si existe
                 if (_pendingRequests.isNotEmpty) {
-                  Future.delayed(const Duration(milliseconds: 500), () {
-                    if (mounted) _showLinkRequestDialog(_pendingRequests.first);
-                  });
+                  await Future.delayed(const Duration(milliseconds: 500));
+                  if (mounted) _showLinkRequestDialog(_pendingRequests.first);
                 }
               } else {
                 ScaffoldMessenger.of(context).showSnackBar(
@@ -252,6 +273,7 @@ void _showLinkRequestDialog(LinkRequest request) {
     ),
   );
 }
+  
   // ✅ NUEVO: Escanear QR para vincular
   Future<void> _scanQRToLink() async {
     final scannedData = await Navigator.push<String>(

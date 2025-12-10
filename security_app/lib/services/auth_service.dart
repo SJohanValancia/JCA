@@ -9,23 +9,25 @@ class AuthService {
   
   static const Duration _timeout = Duration(seconds: 10);
 
-  Future<Map<String, dynamic>> register({
-    required String nombre,
-    required String telefono,
-    required String usuario,
-    required String password,
-  }) async {
-    try {
-      final response = await http.post(
-        Uri.parse('$baseUrl/api/auth/registro'),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({
-          'nombre': nombre,
-          'telefono': telefono,
-          'usuario': usuario,
-          'password': password,
-        }),
-      ).timeout(_timeout);
+Future<Map<String, dynamic>> register({
+  required String nombre,
+  required String telefono,
+  required String usuario,
+  required String password,
+  String rol = 'dueño', // ✅ NUEVO parámetro
+}) async {
+  try {
+    final response = await http.post(
+      Uri.parse('$baseUrl/api/auth/registro'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({
+        'nombre': nombre,
+        'telefono': telefono,
+        'usuario': usuario,
+        'password': password,
+        'rol': rol, // ✅ AÑADIR ESTO
+      }),
+    ).timeout(_timeout);
 
       final data = jsonDecode(response.body);
 

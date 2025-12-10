@@ -1,3 +1,4 @@
+// User.js
 const mongoose = require('mongoose');
 const crypto = require('crypto');
 
@@ -35,6 +36,23 @@ const userSchema = new mongoose.Schema({
     type: String,
     unique: true,
     required: true
+  },
+  // ✅ NUEVO: Rol del usuario
+  rol: {
+    type: String,
+    enum: ['dueno', 'vendedor'],
+    default: 'dueno',
+    required: true
+  },
+  // ✅ NUEVO: Información de deuda para vendedores
+  deudaInfo: {
+    deudaTotal: { type: Number, default: 0 },
+    deudaRestante: { type: Number, default: 0 },
+    cuotasPagadas: { type: Number, default: 0 },
+    cuotasPendientes: { type: Number, default: 0 },
+    montoCuota: { type: Number, default: 0 },
+    proximoPago: { type: Date },
+    ultimoPago: { type: Date }
   }
 }, {
   timestamps: true
