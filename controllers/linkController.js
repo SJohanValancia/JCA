@@ -109,14 +109,14 @@ exports.getPendingRequests = async (req, res) => {
   }
 };
 
-// Responder solicitud (aceptar/rechazar)
+
 // Responder solicitud (aceptar/rechazar)
 exports.respondToRequest = async (req, res) => {
   try {
     const { linkId, accept } = req.body;
-    const userId = req.user.id;
+    const userId = req.user.id; // ✅ Este es el ObjectId de MongoDB
 
-    console.log('🔔 Respondiendo solicitud:', { linkId, accept, userId });
+    console.log('📝 Respondiendo solicitud:', { linkId, accept, userId });
 
     const link = await DeviceLink.findById(linkId);
     if (!link) {
@@ -126,8 +126,12 @@ exports.respondToRequest = async (req, res) => {
       });
     }
 
-    // Verificar que el usuario sea el destinatario
-    if (link.linkedUserId.toString() !== userId) {
+    // ✅ ARREGLADO: Comparar correctamente ObjectId con ObjectId
+    if (link.linkedUserId.toString() !== userId.toString()) {
+      console.log('❌ IDs no coinciden:', {
+        linkedUserId: link.linkedUserId.toString(),
+        userId: userId.toString()
+      });
       return res.status(403).json({
         success: false,
         message: 'No autorizado'
