@@ -10,6 +10,7 @@ import 'map_screen.dart';
 import 'login_screen.dart';
 import 'linked_devices_screen.dart';
 import 'dart:async';
+bool _isDialogOpen = false;
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -58,120 +59,143 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Future<void> _checkPendingRequests() async {
-    final requests = await _linkService.getPendingRequests();
-    if (mounted && requests.isNotEmpty) {
-      setState(() {
-        _pendingRequests = requests;
-      });
-      
-      if (requests.isNotEmpty) {
-        _showLinkRequestDialog(requests.first);
-      }
+Future<void> _checkPendingRequests() async {
+  // No verificar si hay un diálogo abierto
+  if (_isDialogOpen) return;
+  
+  final requests = await _linkService.getPendingRequests();
+  if (mounted) {
+    setState(() {
+      _pendingRequests = requests;
+    });
+    
+    // Solo mostrar si hay solicitudes y no hay diálogo abierto
+    if (requests.isNotEmpty && !_isDialogOpen) {
+      _isDialogOpen = true;
+      _showLinkRequestDialog(requests.first);
     }
   }
-
-  void _showLinkRequestDialog(LinkRequest request) {
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(20),
-        ),
-        title: const Row(
-          children: [
-            Icon(Icons.link, color: Color(0xFF2563EB), size: 28),
-            SizedBox(width: 12),
-            Text('Solicitud de Vinculación'),
-          ],
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              '¿Están solicitando unirse a ti, aceptas?',
-              style: TextStyle(fontSize: 15, fontWeight: FontWeight.w500),
-            ),
-            const SizedBox(height: 16),
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.grey[100],
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      const Icon(Icons.person, size: 20, color: Color(0xFF2563EB)),
-                      const SizedBox(width: 8),
-                      Text(
-                        request.nombre,
-                        style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 16,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      const Icon(Icons.badge, size: 18, color: Colors.grey),
-                      const SizedBox(width: 8),
-                      Text(
-                        'JC-ID: ${request.jcId}',
-                        style: TextStyle(
-                          color: Colors.grey[700],
-                          fontFamily: 'monospace',
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () async {
-              Navigator.pop(context);
-              await _linkService.respondToRequest(request.id, false);
-              _checkPendingRequests();
-            },
-            child: const Text(
-              'Rechazar',
-              style: TextStyle(color: Colors.red),
-            ),
+}
+void _showLinkRequestDialog(LinkRequest request) {
+  // Verificar si el diálogo ya está abierto
+  if (_pendingRequests.isEmpty) return;
+  
+  showDialog(
+    context: context,
+    barrierDismissible: false,
+    builder: (context) => AlertDialog(
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(20),
+      ),
+      title: const Row(
+        children: [
+          Icon(Icons.link, color: Color(0xFF2563EB), size: 28),
+          SizedBox(width: 12),
+          Text('Solicitud de Vinculación'),
+        ],
+      ),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            '¿Están solicitando unirse a ti, aceptas?',
+            style: TextStyle(fontSize: 15, fontWeight: FontWeight.w500),
           ),
-          ElevatedButton(
-            onPressed: () async {
-              Navigator.pop(context);
-              final success = await _linkService.respondToRequest(request.id, true);
-              if (success && mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('✓ Dispositivo vinculado exitosamente'),
-                    backgroundColor: Colors.green,
-                  ),
-                );
-              }
-              _checkPendingRequests();
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF2563EB),
-              foregroundColor: Colors.white,
+          const SizedBox(height: 16),
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.grey[100],
+              borderRadius: BorderRadius.circular(12),
             ),
-            child: const Text('Aceptar'),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    const Icon(Icons.person, size: 20, color: Color(0xFF2563EB)),
+                    const SizedBox(width: 8),
+                    Text(
+                      request.nombre,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    const Icon(Icons.badge, size: 18, color: Colors.grey),
+                    const SizedBox(width: 8),
+                    Text(
+                      'JC-ID: ${request.jcId}',
+                      style: TextStyle(
+                        color: Colors.grey[700],
+                        fontFamily: 'monospace',
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ),
         ],
       ),
-    );
-  }
+      actions: [
+        TextButton(
+          onPressed: () async {
+              _isDialogOpen = false; // Agregar esto
+
+            Navigator.pop(context);
+            await _linkService.respondToRequest(request.id, false);
+            // Actualizar inmediatamente
+            setState(() {
+              _pendingRequests.removeWhere((r) => r.id == request.id);
+            });
+            // Mostrar siguiente si hay más
+            if (_pendingRequests.isNotEmpty) {
+              _showLinkRequestDialog(_pendingRequests.first);
+            }
+          },
+          child: const Text(
+            'Rechazar',
+            style: TextStyle(color: Colors.red),
+          ),
+        ),
+        ElevatedButton(
+          onPressed: () async {
+            Navigator.pop(context);
+            final success = await _linkService.respondToRequest(request.id, true);
+            if (success && mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('✓ Dispositivo vinculado exitosamente'),
+                  backgroundColor: Colors.green,
+                ),
+              );
+            }
+            // Actualizar inmediatamente
+            setState(() {
+              _pendingRequests.removeWhere((r) => r.id == request.id);
+            });
+            // Mostrar siguiente si hay más
+            if (_pendingRequests.isNotEmpty) {
+              _showLinkRequestDialog(_pendingRequests.first);
+            }
+          },
+          style: ElevatedButton.styleFrom(
+            backgroundColor: const Color(0xFF2563EB),
+            foregroundColor: Colors.white,
+          ),
+          child: const Text('Aceptar'),
+        ),
+      ],
+    ),
+  );
+}
 
   void _showLinkDeviceDialog() {
     final jcIdController = TextEditingController();
