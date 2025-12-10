@@ -87,13 +87,18 @@ exports.registro = async (req, res) => {
       }
     });
 
-  } catch (error) {
-    console.error('Error en registro:', error);
-    res.status(500).json({ 
-      success: false,
-      message: 'Error en el servidor' 
-    });
-  }
+} catch (error) {
+  console.error('===== ERROR COMPLETO EN REGISTRO =====');
+  console.error('Error:', error);
+  console.error('Mensaje:', error.message);
+  console.error('Stack:', error.stack);
+  console.error('====================================');
+  res.status(500).json({ 
+    success: false,
+    message: 'Error en el servidor',
+    error: error.message  // ✅ Agregar esto temporalmente
+  });
+}
 };
 
 // Login de usuario
