@@ -77,7 +77,6 @@ userSchema.pre('save', async function() {
     
     this.jcId = jcId;
   }
-  next();
 });
 
 module.exports = mongoose.model('User', userSchema);
