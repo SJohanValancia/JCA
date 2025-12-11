@@ -5,8 +5,10 @@ import '../models/user_model.dart';
 import '../models/linked_user_model.dart';
 import '../services/auth_service.dart';
 import '../services/link_service.dart';
+import '../services/device_owner_service.dart'; // ✅ AGREGAR
 import 'login_screen.dart';
 import 'qr_display_screen.dart';
+import 'lock_message_screen.dart'; // ✅ AGREGAR
 
 class VendorHomeScreen extends StatefulWidget {
   const VendorHomeScreen({super.key});
@@ -18,10 +20,10 @@ class VendorHomeScreen extends StatefulWidget {
 class _VendorHomeScreenState extends State<VendorHomeScreen> {
   final _authService = AuthService();
   final _linkService = LinkService();
+  final _deviceOwnerService = DeviceOwnerService(); // ✅ AGREGAR
   UserModel? _currentUser;
   bool _isLoading = true;
   
-  // ✅ NUEVO: Para manejar solicitudes pendientes
   List<LinkRequest> _pendingRequests = [];
   Timer? _requestCheckTimer;
   bool _isDialogOpen = false;
@@ -31,6 +33,28 @@ class _VendorHomeScreenState extends State<VendorHomeScreen> {
     super.initState();
     _loadUserData();
     _startRequestChecker();
+    _checkLockStatus(); // ✅ YA ESTÁ
+  }
+
+  // ✅ Verificar si el dispositivo está bloqueado
+  Future<void> _checkLockStatus() async {
+    final status = await _deviceOwnerService.checkLockStatus();
+    
+    if (status['isLocked'] == true && mounted) {
+      // Dispositivo bloqueado, mostrar pantalla de bloqueo
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(
+          builder: (context) => LockMessageScreen(
+            message: status['lockMessage'] ?? 'Dispositivo bloqueado',
+            lockedBy: status['lockedBy']?['nombre'] ?? 'Administrador',
+            lockedAt: status['lockedAt'] != null 
+                ? DateTime.parse(status['lockedAt']) 
+                : DateTime.now(),
+          ),
+        ),
+        (route) => false,
+      );
+    }
   }
 
   Future<void> _loadUserData() async {
@@ -41,15 +65,16 @@ class _VendorHomeScreenState extends State<VendorHomeScreen> {
     _checkPendingRequests();
   }
 
-  // ✅ NUEVO: Verificar solicitudes cada 30 segundos
   void _startRequestChecker() {
     _requestCheckTimer = Timer.periodic(
       const Duration(seconds: 30),
-      (timer) => _checkPendingRequests(),
+      (timer) {
+        _checkPendingRequests();
+        _checkLockStatus(); // ✅ También verificar bloqueo cada 30 segundos
+      },
     );
   }
 
-  // ✅ NUEVO: Revisar solicitudes pendientes
   Future<void> _checkPendingRequests() async {
     if (_isDialogOpen) return;
     
@@ -66,7 +91,6 @@ class _VendorHomeScreenState extends State<VendorHomeScreen> {
     }
   }
 
-  // ✅ NUEVO: Mostrar diálogo de solicitud
   void _showLinkRequestDialog(LinkRequest request) {
     if (_pendingRequests.isEmpty) return;
     

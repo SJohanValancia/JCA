@@ -8,6 +8,8 @@ if (process.env.NODE_ENV !== 'production') {
 
 const authRoutes = require('./routes/authRoutes');
 const linkRoutes = require('./routes/linkRoutes'); // 🆕
+const lockRoutes = require('./routes/lockRoutes');
+
 
 const contactRoutes = require('./routes/contactRoutes');
 
@@ -25,6 +27,8 @@ app.use(express.json());
 app.use('/api/auth', authRoutes);
 app.use('/api/link', linkRoutes); // 🆕
 app.use('/api/contacts', contactRoutes);
+app.use('/api/lock', lockRoutes);
+
 
 app.get('/', (req, res) => {
   res.json({ message: 'Security App API funcionando correctamente' });
