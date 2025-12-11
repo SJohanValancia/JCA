@@ -1,0 +1,75 @@
+name: Build and Release APK
+
+on:
+  push:
+    branches:
+      - main  # Cambia a 'master' si ese es tu branch principal
+    tags:
+      - 'v*'  # Se ejecuta también cuando crees tags como v1.0.1
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Setup Java
+        uses: actions/setup-java@v3
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.24.0'  # Usa tu versión de Flutter
+          channel: 'stable'
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Build APK
+        run: flutter build apk --release
+
+      - name: Rename APK
+        run: mv build/app/outputs/flutter-apk/app-release.apk JCA.apk
+
+      - name: Get version from pubspec.yaml
+        id: version
+        run: |
+          VERSION=$(grep 'version:' pubspec.yaml | cut -d ' ' -f 2 | cut -d '+' -f 1)
+          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Create/Update Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: v${{ steps.version.outputs.VERSION }}
+          name: JCA v${{ steps.version.outputs.VERSION }}
+          body: |
+            ## 🚀 Nueva versión de JCA
+            
+            **Versión:** ${{ steps.version.outputs.VERSION }}
+            **Fecha:** ${{ github.event.head_commit.timestamp }}
+            
+            ### 📥 Instalación
+            1. Descarga JCA.apk
+            2. Instala en tu dispositivo
+            3. Si ya tienes la app instalada, se actualizará automáticamente
+            
+            ### 📋 Cambios
+            ${{ github.event.head_commit.message }}
+          files: JCA.apk
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Delete old releases (keep last 5)
+        uses: dev-drprasad/delete-older-releases@v0.3.2
+        with:
+          keep_latest: 5
+          delete_tags: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

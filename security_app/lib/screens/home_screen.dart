@@ -14,6 +14,7 @@ import 'qr_scanner_screen.dart';
 import 'qr_display_screen.dart';
 import 'dart:async';
 import 'vendor_home_screen.dart';
+import 'qr_provisioning_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -428,96 +429,115 @@ void _showLinkRequestDialog(LinkRequest request) {
     );
   }
 
-  Widget _buildHeader() {
-    return Padding(
-      padding: const EdgeInsets.all(24),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Bienvenido!',
-                    style: TextStyle(color: Colors.white70, fontSize: 16),
+Widget _buildHeader() {
+  return Padding(
+    padding: const EdgeInsets.all(24),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Bienvenido!',
+                  style: TextStyle(color: Colors.white70, fontSize: 16),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  _currentUser?.nombre ?? 'Usuario',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 28,
+                    fontWeight: FontWeight.bold,
                   ),
-                  const SizedBox(height: 4),
-                  Text(
-                    _currentUser?.nombre ?? 'Usuario',
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 28,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ],
-              ),
-              IconButton(
-                onPressed: () async {
-                  await _authService.logout();
-                  if (mounted) {
-                    Navigator.pushReplacement(
+                ),
+              ],
+            ),
+            // ✅ ROW con ambos botones
+            Row(
+              children: [
+                // Botón QR Provisioning
+                IconButton(
+                  onPressed: () {
+                    Navigator.push(
                       context,
                       MaterialPageRoute(
-                        builder: (context) => const LoginScreen(),
+                        builder: (context) => const SimpleQRScreen(),
                       ),
                     );
-                  }
-                },
-                icon: const Icon(Icons.logout, color: Colors.white, size: 28),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          // ✅ CAMBIO: QR en lugar de copiar ID
-          GestureDetector(
-            onTap: () {
-              if (_currentUser?.jcId != null && _currentUser!.jcId.isNotEmpty) {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => QRDisplayScreen(
-                      jcId: _currentUser!.jcId,
-                      nombre: _currentUser!.nombre,
-                    ),
+                  },
+                  icon: const Icon(Icons.qr_code_2, color: Colors.white, size: 28),
+                  tooltip: 'QR Device Owner',
+                ),
+                // Botón Logout
+                IconButton(
+                  onPressed: () async {
+                    await _authService.logout();
+                    if (mounted) {
+                      Navigator.pushReplacement(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const LoginScreen(),
+                        ),
+                      );
+                    }
+                  },
+                  icon: const Icon(Icons.logout, color: Colors.white, size: 28),
+                  tooltip: 'Cerrar sesión',
+                ),
+              ],
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        // ✅ QR en lugar de copiar ID
+        GestureDetector(
+          onTap: () {
+            if (_currentUser?.jcId != null && _currentUser!.jcId.isNotEmpty) {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => QRDisplayScreen(
+                    jcId: _currentUser!.jcId,
+                    nombre: _currentUser!.nombre,
                   ),
-                );
-              }
-            },
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-              decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.2),
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(Icons.qr_code, color: Colors.white, size: 20),
-                  const SizedBox(width: 8),
-                  Text(
-                    'ID: ${_currentUser?.jcId ?? "N/A"}',
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 14,
-                      fontWeight: FontWeight.bold,
-                      fontFamily: 'monospace',
-                    ),
+                ),
+              );
+            }
+          },
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.2),
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.qr_code, color: Colors.white, size: 20),
+                const SizedBox(width: 8),
+                Text(
+                  'ID: ${_currentUser?.jcId ?? "N/A"}',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                    fontFamily: 'monospace',
                   ),
-                  const SizedBox(width: 8),
-                  const Icon(Icons.touch_app, color: Colors.white70, size: 16),
-                ],
-              ),
+                ),
+                const SizedBox(width: 8),
+                const Icon(Icons.touch_app, color: Colors.white70, size: 16),
+              ],
             ),
           ),
-        ],
-      ),
-    );
-  }
-
+        ),
+      ],
+    ),
+  );
+}
   Widget _buildMainReportButton() {
     return InkWell(
       onTap: _showReportDialog,
