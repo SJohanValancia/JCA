@@ -17,4 +17,9 @@ router.post('/unlink', linkController.unlinkDevice);
 router.post('/location/update', linkController.updateLocation);
 router.get('/location/linked', linkController.getLinkedLocations);
 
+// ✅ NUEVAS rutas para configuración de deuda
+router.post('/debt/configure', linkController.configureDebt);
+router.get('/debt/:linkedUserId', linkController.getDebtConfig);
+router.post('/debt/payment', linkController.registerPayment);
+
 module.exports = router;

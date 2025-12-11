@@ -36,14 +36,13 @@ const userSchema = new mongoose.Schema({
     type: String,
     unique: true,
   },
-  // ✅ NUEVO: Rol del usuario
   rol: {
     type: String,
     enum: ['dueno', 'vendedor'],
     default: 'dueno',
     required: true
   },
-  // ✅ NUEVO: Información de deuda para vendedores
+  // ✅ Información de deuda (se actualiza desde el dueño)
   deudaInfo: {
     deudaTotal: { type: Number, default: 0 },
     deudaRestante: { type: Number, default: 0 },
@@ -64,11 +63,9 @@ userSchema.pre('save', async function() {
     let jcId;
     
     while (!isUnique) {
-      // Generar ID aleatorio de 8 caracteres
       const randomBytes = crypto.randomBytes(4);
       jcId = 'JC' + randomBytes.toString('hex').toUpperCase();
       
-      // Verificar si ya existe
       const existing = await mongoose.models.User.findOne({ jcId });
       if (!existing) {
         isUnique = true;
