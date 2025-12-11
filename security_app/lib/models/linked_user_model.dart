@@ -3,6 +3,7 @@ class LinkedUserModel {
   final String nombre;
   final String usuario;
   final String jcId;
+  final String? rol; // ✅ NUEVO
   final double? latitude;
   final double? longitude;
   final String? address;
@@ -16,6 +17,7 @@ class LinkedUserModel {
     required this.nombre,
     required this.usuario,
     required this.jcId,
+    this.rol, // ✅ NUEVO
     this.latitude,
     this.longitude,
     this.address,
@@ -31,6 +33,7 @@ class LinkedUserModel {
       nombre: json['userId']?['nombre'] ?? json['nombre'] ?? '',
       usuario: json['userId']?['usuario'] ?? json['usuario'] ?? '',
       jcId: json['userId']?['jcId'] ?? json['jcId'] ?? '',
+      rol: json['userId']?['rol'] ?? json['rol'], // ✅ NUEVO
       latitude: json['latitude']?.toDouble(),
       longitude: json['longitude']?.toDouble(),
       address: json['address'],
@@ -42,6 +45,9 @@ class LinkedUserModel {
           : null,
     );
   }
+  
+  // ✅ NUEVO: Helper para verificar si es vendedor
+  bool get isVendedor => rol == 'vendedor';
 }
 
 class LinkRequest {

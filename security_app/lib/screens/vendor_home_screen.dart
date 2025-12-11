@@ -1,8 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'dart:async';
 import '../models/user_model.dart';
+import '../models/linked_user_model.dart';
 import '../services/auth_service.dart';
+import '../services/link_service.dart';
 import 'login_screen.dart';
+import 'qr_display_screen.dart';
 
 class VendorHomeScreen extends StatefulWidget {
   const VendorHomeScreen({super.key});
@@ -13,13 +17,20 @@ class VendorHomeScreen extends StatefulWidget {
 
 class _VendorHomeScreenState extends State<VendorHomeScreen> {
   final _authService = AuthService();
+  final _linkService = LinkService();
   UserModel? _currentUser;
   bool _isLoading = true;
+  
+  // ✅ NUEVO: Para manejar solicitudes pendientes
+  List<LinkRequest> _pendingRequests = [];
+  Timer? _requestCheckTimer;
+  bool _isDialogOpen = false;
 
   @override
   void initState() {
     super.initState();
     _loadUserData();
+    _startRequestChecker();
   }
 
   Future<void> _loadUserData() async {
@@ -27,6 +38,210 @@ class _VendorHomeScreenState extends State<VendorHomeScreen> {
     if (mounted) {
       setState(() => _isLoading = false);
     }
+    _checkPendingRequests();
+  }
+
+  // ✅ NUEVO: Verificar solicitudes cada 30 segundos
+  void _startRequestChecker() {
+    _requestCheckTimer = Timer.periodic(
+      const Duration(seconds: 30),
+      (timer) => _checkPendingRequests(),
+    );
+  }
+
+  // ✅ NUEVO: Revisar solicitudes pendientes
+  Future<void> _checkPendingRequests() async {
+    if (_isDialogOpen) return;
+    
+    final requests = await _linkService.getPendingRequests();
+    if (mounted) {
+      setState(() {
+        _pendingRequests = requests;
+      });
+      
+      if (requests.isNotEmpty && !_isDialogOpen) {
+        _isDialogOpen = true;
+        _showLinkRequestDialog(requests.first);
+      }
+    }
+  }
+
+  // ✅ NUEVO: Mostrar diálogo de solicitud
+  void _showLinkRequestDialog(LinkRequest request) {
+    if (_pendingRequests.isEmpty) return;
+    
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => AlertDialog(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+        ),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: const Color(0xFF8B5CF6).withOpacity(0.1),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                Icons.person_add,
+                color: Color(0xFF8B5CF6),
+                size: 24,
+              ),
+            ),
+            const SizedBox(width: 12),
+            const Expanded(
+              child: Text(
+                'Solicitud de Vinculación',
+                style: TextStyle(fontSize: 18),
+              ),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              request.nombre,
+              style: const TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(
+                color: Colors.grey[200],
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text(
+                request.jcId,
+                style: const TextStyle(
+                  fontFamily: 'monospace',
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            const Text(
+              'quiere vincularse contigo para compartir información.',
+              style: TextStyle(fontSize: 15),
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              '¿Aceptas?',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () async {
+              Navigator.of(dialogContext).pop();
+              
+              if (!mounted) return;
+              showDialog(
+                context: context,
+                barrierDismissible: false,
+                builder: (loadingContext) => WillPopScope(
+                  onWillPop: () async => false,
+                  child: const Center(child: CircularProgressIndicator()),
+                ),
+              );
+              
+              final success = await _linkService.respondToRequest(request.id, false);
+              
+              if (mounted) {
+                Navigator.of(context, rootNavigator: true).pop();
+                
+                if (success) {
+                  setState(() {
+                    _isDialogOpen = false;
+                    _pendingRequests.removeWhere((r) => r.id == request.id);
+                  });
+                  
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('❌ Solicitud rechazada'),
+                      backgroundColor: Colors.orange,
+                    ),
+                  );
+                  
+                  if (_pendingRequests.isNotEmpty) {
+                    await Future.delayed(const Duration(milliseconds: 500));
+                    if (mounted) _showLinkRequestDialog(_pendingRequests.first);
+                  }
+                }
+              }
+            },
+            child: const Text(
+              'Rechazar',
+              style: TextStyle(color: Colors.red),
+            ),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              Navigator.of(dialogContext).pop();
+              
+              if (!mounted) return;
+              showDialog(
+                context: context,
+                barrierDismissible: false,
+                builder: (loadingContext) => WillPopScope(
+                  onWillPop: () async => false,
+                  child: const Center(child: CircularProgressIndicator()),
+                ),
+              );
+              
+              final success = await _linkService.respondToRequest(request.id, true);
+              
+              if (mounted) {
+                Navigator.of(context, rootNavigator: true).pop();
+                
+                if (success) {
+                  setState(() {
+                    _isDialogOpen = false;
+                    _pendingRequests.removeWhere((r) => r.id == request.id);
+                  });
+                  
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('✅ ${request.nombre} vinculado exitosamente'),
+                      backgroundColor: Colors.green,
+                      duration: const Duration(seconds: 3),
+                    ),
+                  );
+                  
+                  if (_pendingRequests.isNotEmpty) {
+                    await Future.delayed(const Duration(milliseconds: 500));
+                    if (mounted) _showLinkRequestDialog(_pendingRequests.first);
+                  }
+                } else {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('❌ Error al vincular'),
+                      backgroundColor: Colors.red,
+                    ),
+                  );
+                }
+              }
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF8B5CF6),
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Aceptar'),
+          ),
+        ],
+      ),
+    );
   }
 
   String _formatCurrency(double amount) {
@@ -131,56 +346,65 @@ class _VendorHomeScreenState extends State<VendorHomeScreen> {
                   ),
                 ],
               ),
-              Row(
+              IconButton(
+                onPressed: () async {
+                  await _authService.logout();
+                  if (mounted) {
+                    Navigator.pushReplacement(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const LoginScreen(),
+                      ),
+                    );
+                  }
+                },
+                icon: const Icon(Icons.logout, 
+                  color: Colors.white, 
+                  size: 28
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          GestureDetector(
+            onTap: () {
+              if (_currentUser?.jcId != null && _currentUser!.jcId.isNotEmpty) {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => QRDisplayScreen(
+                      jcId: _currentUser!.jcId,
+                      nombre: _currentUser!.nombre,
+                    ),
+                  ),
+                );
+              }
+            },
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.2),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
                 children: [
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 6,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.2),
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: const Row(
-                      children: [
-                        Icon(Icons.shopping_bag, 
-                          color: Colors.white, 
-                          size: 16
-                        ),
-                        SizedBox(width: 6),
-                        Text(
-                          'Vendedor',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ],
+                  const Icon(Icons.qr_code, color: Colors.white, size: 20),
+                  const SizedBox(width: 8),
+                  Text(
+                    'ID: ${_currentUser?.jcId ?? "N/A"}',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 14,
+                      fontWeight: FontWeight.bold,
+                      fontFamily: 'monospace',
                     ),
                   ),
                   const SizedBox(width: 8),
-                  IconButton(
-                    onPressed: () async {
-                      await _authService.logout();
-                      if (mounted) {
-                        Navigator.pushReplacement(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => const LoginScreen(),
-                          ),
-                        );
-                      }
-                    },
-                    icon: const Icon(Icons.logout, 
-                      color: Colors.white, 
-                      size: 28
-                    ),
-                  ),
+                  const Icon(Icons.touch_app, color: Colors.white70, size: 16),
                 ],
               ),
-            ],
+            ),
           ),
         ],
       ),
@@ -473,5 +697,11 @@ class _VendorHomeScreenState extends State<VendorHomeScreen> {
         ),
       ],
     );
+  }
+
+  @override
+  void dispose() {
+    _requestCheckTimer?.cancel();
+    super.dispose();
   }
 }

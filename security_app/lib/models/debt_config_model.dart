@@ -1,10 +1,10 @@
-// debt_config_model.dart
+// models/debt_config_model.dart
 class DebtConfig {
   final double deudaTotal;
   final int numeroCuotas;
   final double montoCuota;
   final String modalidadPago; // 'diario', 'semanal', 'quincenal', 'mensual'
-  final List<int> diasPago; // Para guardar los días seleccionados
+  final List<int> diasPago;
   final DateTime? proximoPago;
   final DateTime fechaInicio;
 
@@ -24,7 +24,9 @@ class DebtConfig {
       numeroCuotas: json['numeroCuotas'] ?? 0,
       montoCuota: (json['montoCuota'] ?? 0).toDouble(),
       modalidadPago: json['modalidadPago'] ?? 'mensual',
-      diasPago: List<int>.from(json['diasPago'] ?? []),
+      diasPago: json['diasPago'] != null 
+          ? List<int>.from(json['diasPago']) 
+          : [],
       proximoPago: json['proximoPago'] != null 
           ? DateTime.parse(json['proximoPago']) 
           : null,

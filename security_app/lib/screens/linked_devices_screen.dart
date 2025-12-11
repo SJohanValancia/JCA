@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../models/linked_user_model.dart';
 import '../services/link_service.dart';
+import 'debt_config_screen.dart';
 
 class LinkedDevicesScreen extends StatefulWidget {
   const LinkedDevicesScreen({super.key});
@@ -33,6 +34,20 @@ class _LinkedDevicesScreenState extends State<LinkedDevicesScreen> {
       });
     }
   }
+
+  Future<void> _openDebtConfig(LinkedUserModel device) async {
+  final result = await Navigator.push(
+    context,
+    MaterialPageRoute(
+      builder: (context) => DebtConfigScreen(vendedor: device),
+    ),
+  );
+
+  if (result == true) {
+    // Recargar dispositivos si se guardó configuración
+    _loadLinkedDevices();
+  }
+}
 
   Future<void> _unlinkDevice(LinkedUserModel device) async {
     final confirm = await showDialog<bool>(
@@ -158,74 +173,81 @@ class _LinkedDevicesScreenState extends State<LinkedDevicesScreen> {
     );
   }
 
-  Widget _buildDeviceCard(LinkedUserModel device) {
-    return Card(
-      margin: const EdgeInsets.only(bottom: 16),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-      ),
-      elevation: 2,
-      child: InkWell(
-        onTap: () => _showDeviceDetails(device),
-        borderRadius: BorderRadius.circular(16),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Row(
-            children: [
-              Container(
-                width: 60,
-                height: 60,
-                decoration: BoxDecoration(
-                  color: const Color(0xFF2563EB).withOpacity(0.1),
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(
-                  Icons.person,
-                  color: Color(0xFF2563EB),
-                  size: 30,
-                ),
+Widget _buildDeviceCard(LinkedUserModel device) {
+  return Card(
+    margin: const EdgeInsets.only(bottom: 16),
+    shape: RoundedRectangleBorder(
+      borderRadius: BorderRadius.circular(16),
+    ),
+    elevation: 2,
+    child: InkWell(
+      onTap: () => _showDeviceDetails(device),
+      borderRadius: BorderRadius.circular(16),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Row(
+          children: [
+            Container(
+              width: 60,
+              height: 60,
+              decoration: BoxDecoration(
+                color: const Color(0xFF2563EB).withOpacity(0.1),
+                shape: BoxShape.circle,
               ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      device.nombre,
-                      style: const TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                      ),
+              child: const Icon(
+                Icons.person,
+                color: Color(0xFF2563EB),
+                size: 30,
+              ),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    device.nombre,
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
                     ),
-                    const SizedBox(height: 4),
-                    Row(
-                      children: [
-                        const Icon(Icons.badge, size: 14, color: Colors.grey),
-                        const SizedBox(width: 4),
-                        Text(
-                          device.jcId,
-                          style: const TextStyle(
-                            color: Colors.grey,
-                            fontFamily: 'monospace',
-                            fontSize: 12,
-                          ),
+                  ),
+                  const SizedBox(height: 4),
+                  Row(
+                    children: [
+                      const Icon(Icons.badge, size: 14, color: Colors.grey),
+                      const SizedBox(width: 4),
+                      Text(
+                        device.jcId,
+                        style: const TextStyle(
+                          color: Colors.grey,
+                          fontFamily: 'monospace',
+                          fontSize: 12,
                         ),
-                      ],
-                    ),
-                  ],
-                ),
+                      ),
+                    ],
+                  ),
+                ],
               ),
+            ),
+            // ✅ NUEVO: Botón de configuración
+            if (device.isVendedor)
               IconButton(
-                onPressed: () => _unlinkDevice(device),
-                icon: const Icon(Icons.link_off, color: Colors.red),
-                tooltip: 'Desvincular',
+                onPressed: () => _openDebtConfig(device),
+                icon: const Icon(Icons.settings, color: Color(0xFF8B5CF6)),
+                tooltip: 'Configurar deuda',
               ),
-            ],
-          ),
+            IconButton(
+              onPressed: () => _unlinkDevice(device),
+              icon: const Icon(Icons.link_off, color: Colors.red),
+              tooltip: 'Desvincular',
+            ),
+          ],
         ),
       ),
-    );
-  }
+    ),
+  );
+}
 
   void _showDeviceDetails(LinkedUserModel device) {
     showModalBottomSheet(

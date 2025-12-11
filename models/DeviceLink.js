@@ -1,4 +1,4 @@
-// models/Link.js
+// models/DeviceLink.js
 const mongoose = require('mongoose');
 
 const linkSchema = new mongoose.Schema({
@@ -14,7 +14,7 @@ const linkSchema = new mongoose.Schema({
   },
   status: {
     type: String,
-    enum: ['pending', 'accepted', 'rejected'],
+    enum: ['pending', 'accepted', 'rejected', 'active'], // ✅ AGREGADO 'active'
     default: 'pending'
   },
   requestedAt: {
@@ -24,7 +24,10 @@ const linkSchema = new mongoose.Schema({
   acceptedAt: {
     type: Date
   },
-  // ✅ NUEVO: Configuración de deuda
+  respondedAt: {  // ✅ AGREGADO este campo que usa el controller
+    type: Date
+  },
+  // ✅ Configuración de deuda
   debtConfig: {
     deudaTotal: { type: Number, default: 0 },
     numeroCuotas: { type: Number, default: 0 },
@@ -34,7 +37,7 @@ const linkSchema = new mongoose.Schema({
       enum: ['diario', 'semanal', 'quincenal', 'mensual'],
       default: 'mensual'
     },
-    diasPago: [{ type: Number }], // Días seleccionados según modalidad
+    diasPago: [{ type: Number }],
     proximoPago: { type: Date },
     fechaInicio: { type: Date },
     cuotasPagadas: { type: Number, default: 0 }
@@ -43,7 +46,7 @@ const linkSchema = new mongoose.Schema({
   timestamps: true
 });
 
-// Índice para búsquedas rápidas
+// Índices para búsquedas rápidas
 linkSchema.index({ userId: 1, linkedUserId: 1 });
 linkSchema.index({ status: 1 });
 

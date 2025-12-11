@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:http/http.dart' as http;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../models/linked_user_model.dart';
+import '../models/debt_config_model.dart';
 
 class LinkService {
   static const String baseUrl = 'https://jca-labd.onrender.com';
@@ -109,42 +110,42 @@ class LinkService {
   }
 
   // ✅ ARREGLADO: Obtener dispositivos vinculados
-  Future<List<LinkedUserModel>> getLinkedDevices() async {
-    try {
-      final headers = await _getHeaders();
+Future<List<LinkedUserModel>> getLinkedDevices() async {
+  try {
+    final headers = await _getHeaders();
+    
+    final response = await http.get(
+      Uri.parse('$baseUrl/api/link/devices'),
+      headers: headers,
+    ).timeout(_timeout);
+
+    print('📱 Linked devices status: ${response.statusCode}');
+    print('📱 Linked devices body: ${response.body}');
+
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body);
+      final List devices = data['linkedDevices'] ?? [];
       
-      final response = await http.get(
-        Uri.parse('$baseUrl/api/link/devices'),
-        headers: headers,
-      ).timeout(_timeout);
-
-      print('📱 Linked devices status: ${response.statusCode}');
-      print('📱 Linked devices body: ${response.body}');
-
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        final List devices = data['linkedDevices'] ?? [];
-        
-        print('✅ Dispositivos vinculados: ${devices.length}');
-        
-        // ✅ IMPORTANTE: Mapear correctamente desde linkedUserId
-        return devices.map((d) {
-          final linkedUser = d['linkedUserId'];
-          return LinkedUserModel(
-            id: linkedUser['_id'] ?? '',
-            nombre: linkedUser['nombre'] ?? '',
-            usuario: linkedUser['usuario'] ?? '',
-            jcId: linkedUser['jcId'] ?? '',
-          );
-        }).toList();
-      }
-      return [];
-    } catch (e) {
-      print('❌ Error obteniendo dispositivos: $e');
-      return [];
+      print('✅ Dispositivos vinculados: ${devices.length}');
+      
+      // ✅ CORREGIDO: Incluir el campo 'rol'
+      return devices.map((d) {
+        final linkedUser = d['linkedUserId'];
+        return LinkedUserModel(
+          id: linkedUser['_id'] ?? '',
+          nombre: linkedUser['nombre'] ?? '',
+          usuario: linkedUser['usuario'] ?? '',
+          jcId: linkedUser['jcId'] ?? '',
+          rol: linkedUser['rol'], // ✅ AGREGADO
+        );
+      }).toList();
     }
+    return [];
+  } catch (e) {
+    print('❌ Error obteniendo dispositivos: $e');
+    return [];
   }
-
+}
   Future<bool> updateLocation({
     required double latitude,
     required double longitude,
@@ -213,4 +214,97 @@ class LinkService {
       return false;
     }
   }
+
+ Future<Map<String, dynamic>> configureDebt({
+    required String linkedUserId,
+    required DebtConfig debtConfig,
+  }) async {
+    try {
+      final headers = await _getHeaders();
+      
+      print('📊 Configurando deuda para: $linkedUserId');
+      
+      final response = await http.post(
+        Uri.parse('$baseUrl/api/link/debt/configure'),
+        headers: headers,
+        body: jsonEncode({
+          'linkedUserId': linkedUserId,
+          'debtConfig': debtConfig.toJson(),
+        }),
+      ).timeout(_timeout);
+
+      print('📡 Status: ${response.statusCode}');
+      print('📦 Response: ${response.body}');
+
+      final data = jsonDecode(response.body);
+
+      if (response.statusCode == 200) {
+        return {
+          'success': true,
+          'message': data['message'],
+          'debtConfig': data['debtConfig']
+        };
+      } else {
+        return {
+          'success': false,
+          'message': data['message'] ?? 'Error configurando deuda'
+        };
+      }
+    } catch (e) {
+      print('❌ Error configurando deuda: $e');
+      return {
+        'success': false,
+        'message': 'Error de conexión'
+      };
+    }
+  }
+
+  // ✅ NUEVO: Obtener configuración de deuda
+  Future<DebtConfig?> getDebtConfig(String linkedUserId) async {
+    try {
+      final headers = await _getHeaders();
+      
+      final response = await http.get(
+        Uri.parse('$baseUrl/api/link/debt/$linkedUserId'),
+        headers: headers,
+      ).timeout(_timeout);
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        if (data['debtConfig'] != null && (data['debtConfig'] as Map).isNotEmpty) {
+          return DebtConfig.fromJson(data['debtConfig']);
+        }
+      }
+      return null;
+    } catch (e) {
+      print('❌ Error obteniendo configuración: $e');
+      return null;
+    }
+  }
+
+  // ✅ NUEVO: Registrar pago
+  Future<bool> registerPayment({
+    required String linkedUserId,
+    required double montoPagado,
+  }) async {
+    try {
+      final headers = await _getHeaders();
+      
+      final response = await http.post(
+        Uri.parse('$baseUrl/api/link/debt/payment'),
+        headers: headers,
+        body: jsonEncode({
+          'linkedUserId': linkedUserId,
+          'montoPagado': montoPagado,
+        }),
+      ).timeout(_timeout);
+
+      return response.statusCode == 200;
+    } catch (e) {
+      print('❌ Error registrando pago: $e');
+      return false;
+    }
+  }
+
 }
+
