@@ -104,27 +104,39 @@ class DeviceOwnerService {
   }
 
   // Verificar estado de bloqueo (para vendedor)
-  Future<Map<String, dynamic>> checkLockStatus() async {
-    try {
-      final headers = await _getHeaders();
-      
-      final response = await http.get(
-        Uri.parse('$baseUrl/api/lock/check'),
-        headers: headers,
-      ).timeout(_timeout);
+// Verificar estado de bloqueo (para vendedor)
+Future<Map<String, dynamic>> checkLockStatus() async {
+  try {
+    final headers = await _getHeaders();
+    final token = await storage.read(key: 'token');
+    
+    // 🔍 DEBUG: Ver qué token se está usando
+    print('🔑 Token usado: ${token?.substring(0, 20)}...');
+    
+    print('🌐 Consultando estado de bloqueo al backend...');
+    print('🔗 URL: $baseUrl/api/lock/check');
+    
+    final response = await http.get(
+      Uri.parse('$baseUrl/api/lock/check'),
+      headers: headers,
+    ).timeout(_timeout);
 
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        return data;
-      }
-      
-      return {'success': false, 'isLocked': false};
-    } catch (e) {
-      print('❌ Error verificando estado: $e');
-      return {'success': false, 'isLocked': false};
+    print('📡 Status Code: ${response.statusCode}');
+    print('📦 Response Body: ${response.body}');
+
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body);
+      print('✅ Datos parseados: $data');
+      return data;
     }
+    
+    print('⚠️ Status code diferente de 200');
+    return {'success': false, 'isLocked': false};
+  } catch (e) {
+    print('❌ Error verificando estado: $e');
+    return {'success': false, 'isLocked': false};
   }
-
+}
   // Obtener estado de bloqueo de un vendedor (para dueño)
   Future<Map<String, dynamic>> getLockStatus(String vendedorId) async {
     try {

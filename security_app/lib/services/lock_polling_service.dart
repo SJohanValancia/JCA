@@ -1,0 +1,119 @@
+// lib/services/lock_polling_service.dart
+import 'dart:async';
+import 'package:flutter/services.dart';
+import 'device_owner_service.dart';
+
+class LockPollingService {
+  static final LockPollingService _instance = LockPollingService._internal();
+  factory LockPollingService() => _instance;
+  LockPollingService._internal();
+
+  final _deviceOwnerService = DeviceOwnerService();
+  Timer? _pollTimer;
+  bool _isPolling = false;
+  static const platform = MethodChannel('com.example.security_app/device_owner');
+
+  // Iniciar polling
+// Iniciar polling
+void startPolling() {
+  if (_isPolling) return;
+  
+  print('🔄 Iniciando polling de bloqueo...');
+  _isPolling = true;
+  
+  // ✅ ESPERAR 2 SEGUNDOS antes de la primera verificación
+  Future.delayed(const Duration(seconds: 2), () {
+    _checkLockStatus();
+    
+    // Luego verificar cada 10 segundos
+    _pollTimer = Timer.periodic(const Duration(seconds: 10), (timer) async {
+      await _checkLockStatus();
+    });
+  });
+}
+  // Detener polling
+  void stopPolling() {
+    print('⏹️ Deteniendo polling de bloqueo');
+    _pollTimer?.cancel();
+    _pollTimer = null;
+    _isPolling = false;
+  }
+
+  // Verificar estado de bloqueo
+  Future<void> _checkLockStatus() async {
+    try {
+      print('🔍 Verificando estado de bloqueo en backend...');
+      
+      // Consultar al backend si este dispositivo debe estar bloqueado
+      final status = await _deviceOwnerService.checkLockStatus();
+      
+      print('📊 Estado recibido del backend: $status');
+      
+      if (status['isLocked'] == true) {
+        final message = status['lockMessage'] ?? 'Dispositivo bloqueado';
+        print('🔒 BLOQUEO DETECTADO - Mensaje: $message');
+        
+        // Activar bloqueo nativo
+        await _activateNativeLock(message);
+      } else {
+        print('✅ Dispositivo NO bloqueado según backend');
+        
+        // Desactivar bloqueo nativo si estaba activo
+        await _deactivateNativeLock();
+      }
+    } catch (e) {
+      print('❌ Error en polling: $e');
+    }
+  }
+
+  // Activar bloqueo nativo
+  Future<void> _activateNativeLock(String message) async {
+    try {
+      final isCurrentlyLocked = await platform.invokeMethod('isLocked');
+      
+      if (isCurrentlyLocked != true) {
+        print('🔐 Activando bloqueo nativo...');
+        final result = await platform.invokeMethod('lockDevice', {
+          'message': message,
+        });
+        
+        if (result == true) {
+          print('✅ Bloqueo nativo activado exitosamente');
+        } else {
+          print('⚠️ No se pudo activar el bloqueo nativo');
+        }
+      } else {
+        print('ℹ️ El dispositivo ya está bloqueado');
+      }
+    } catch (e) {
+      print('❌ Error activando bloqueo nativo: $e');
+    }
+  }
+
+  // Desactivar bloqueo nativo
+// Desactivar bloqueo nativo
+Future<void> _deactivateNativeLock() async {
+  try {
+    final isCurrentlyLocked = await platform.invokeMethod('isLocked');
+    
+    if (isCurrentlyLocked == true) {
+      print('🔓 Desactivando bloqueo nativo...');
+      final result = await platform.invokeMethod('unlockDevice');
+      
+      if (result == true) {
+        print('✅ Bloqueo nativo desactivado exitosamente');
+      }
+    }
+  } on PlatformException catch (e) {
+    // ✅ NO ES ERROR si el plugin no está disponible todavía
+    print('⚠️ Plugin no disponible aún: ${e.message}');
+  } catch (e) {
+    print('❌ Error desactivando bloqueo nativo: $e');
+  }
+}
+  // Forzar verificación inmediata
+  Future<void> forceCheck() async {
+    print('⚡ Verificación forzada');
+    await _checkLockStatus();
+  }
+}

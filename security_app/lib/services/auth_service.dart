@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../models/user_model.dart';
+import 'lock_polling_service.dart'; // ✅ IMPORTAR
 
 class AuthService {
   static const String baseUrl = 'https://jca-labd.onrender.com';
@@ -9,33 +10,35 @@ class AuthService {
   
   static const Duration _timeout = Duration(seconds: 10);
 
-Future<Map<String, dynamic>> register({
-  required String nombre,
-  required String telefono,
-  required String usuario,
-  required String password,
-  String rol = 'dueno', // ✅ NUEVO parámetro
-}) async {
-  try {
-    final response = await http.post(
-      Uri.parse('$baseUrl/api/auth/registro'),
-      headers: {'Content-Type': 'application/json'},
-      body: jsonEncode({
-        'nombre': nombre,
-        'telefono': telefono,
-        'usuario': usuario,
-        'password': password,
-        'rol': rol, // ✅ AÑADIR ESTO
-      }),
-    ).timeout(_timeout);
+  Future<Map<String, dynamic>> register({
+    required String nombre,
+    required String telefono,
+    required String usuario,
+    required String password,
+    String rol = 'dueno',
+  }) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/api/auth/registro'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'nombre': nombre,
+          'telefono': telefono,
+          'usuario': usuario,
+          'password': password,
+          'rol': rol,
+        }),
+      ).timeout(_timeout);
 
       final data = jsonDecode(response.body);
 
       if (response.statusCode == 201 && data['success']) {
-        await Future.wait([
-          storage.write(key: 'token', value: data['token']),
-          storage.write(key: 'user', value: jsonEncode(data['usuario'])),
-        ]);
+        // ✅ Guardar token, user Y userId
+        await storage.write(key: 'token', value: data['token']);
+        await storage.write(key: 'user', value: jsonEncode(data['usuario']));
+        await storage.write(key: 'userId', value: data['usuario']['_id']);
+        
+        print('✅ Registro exitoso - User ID: ${data['usuario']['_id']}');
         
         return {
           'success': true,
@@ -49,9 +52,10 @@ Future<Map<String, dynamic>> register({
         };
       }
     } catch (e) {
+      print('❌ Error en registro: $e');
       return {
         'success': false,
-        'message': 'Error de conexion: No se pudo conectar al servidor',
+        'message': 'Error de conexión: No se pudo conectar al servidor',
       };
     }
   }
@@ -72,21 +76,35 @@ Future<Map<String, dynamic>> register({
 
       final data = jsonDecode(response.body);
 
-      // ✅ LOGS PARA DEBUG
       print('===== RESPUESTA DEL SERVIDOR =====');
       print('Status Code: ${response.statusCode}');
-      print('Data completa: $data');
+      print('Success: ${data['success']}');
       if (data['usuario'] != null) {
-        print('Usuario: ${data['usuario']}');
-        print('JC-ID recibido: ${data['usuario']['jcId']}');
+        print('User ID: ${data['usuario']['_id']}');
+        print('JC-ID: ${data['usuario']['jcId']}');
+        print('Rol: ${data['usuario']['rol']}');
       }
       print('==================================');
 
       if (response.statusCode == 200 && data['success']) {
-        await Future.wait([
-          storage.write(key: 'token', value: data['token']),
-          storage.write(key: 'user', value: jsonEncode(data['usuario'])),
-        ]);
+        // ✅ Guardar token, user Y userId
+        await storage.write(key: 'token', value: data['token']);
+        await storage.write(key: 'user', value: jsonEncode(data['usuario']));
+        await storage.write(key: 'userId', value: data['usuario']['_id']);
+        
+        print('✅ Login exitoso - User ID: ${data['usuario']['_id']}');
+        print('✅ Token guardado: ${data['token'].substring(0, 20)}...');
+        
+        // ✅ INICIAR POLLING SOLO SI ES VENDEDOR
+        if (data['usuario']['rol'] == 'vendedor') {
+          print('🔄 Usuario es vendedor, iniciando polling de bloqueo...');
+          Future.delayed(const Duration(seconds: 2), () {
+            final lockPolling = LockPollingService();
+            lockPolling.startPolling();
+          });
+        } else {
+          print('👤 Usuario es dueño, no se inicia polling');
+        }
         
         return {
           'success': true,
@@ -100,10 +118,10 @@ Future<Map<String, dynamic>> register({
         };
       }
     } catch (e) {
-      print('ERROR en login: $e');
+      print('❌ Error en login: $e');
       return {
         'success': false,
-        'message': 'Error de conexion: No se pudo conectar al servidor',
+        'message': 'Error de conexión: No se pudo conectar al servidor',
       };
     }
   }
@@ -114,10 +132,12 @@ Future<Map<String, dynamic>> register({
   }
 
   Future<void> logout() async {
-    await Future.wait([
-      storage.delete(key: 'token'),
-      storage.delete(key: 'user'),
-    ]);
+    // ✅ Detener polling si está activo
+    final lockPolling = LockPollingService();
+    lockPolling.stopPolling();
+    
+    await storage.deleteAll();
+    print('✅ Sesión cerrada completamente');
   }
 
   Future<UserModel?> getUser() async {

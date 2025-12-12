@@ -14,38 +14,43 @@ class MainActivity : FlutterActivity() {
     private lateinit var devicePolicyManager: DevicePolicyManager
     private lateinit var adminComponent: ComponentName
 
-    override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
-        super.configureFlutterEngine(flutterEngine)
-        
-        devicePolicyManager = getSystemService(Context.DEVICE_POLICY_SERVICE) as DevicePolicyManager
-        adminComponent = ComponentName(this, MyDeviceAdminReceiver::class.java)
+override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
+    super.configureFlutterEngine(flutterEngine)
+    
+    devicePolicyManager = getSystemService(Context.DEVICE_POLICY_SERVICE) as DevicePolicyManager
+    adminComponent = ComponentName(this, MyDeviceAdminReceiver::class.java)
 
-        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL).setMethodCallHandler { call, result ->
-            when (call.method) {
-                "lockDevice" -> {
-                    val message = call.argument<String>("message") ?: "Dispositivo bloqueado"
-                    val success = lockDevice(message)
-                    result.success(success)
-                }
-                "unlockDevice" -> {
-                    val success = unlockDevice()
-                    result.success(success)
-                }
-                "isLocked" -> {
-                    val isLocked = isDeviceLocked()
-                    result.success(isLocked)
-                }
-                else -> {
-                    result.notImplemented()
-                }
+    println("✅ Registrando MethodChannel: $CHANNEL")
+
+    MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL).setMethodCallHandler { call, result ->
+        println("📞 Método llamado: ${call.method}")
+        when (call.method) {
+            "lockDevice" -> {
+                val message = call.argument<String>("message") ?: "Dispositivo bloqueado"
+                val success = lockDevice(message)
+                result.success(success)
+            }
+            "unlockDevice" -> {
+                val success = unlockDevice()
+                result.success(success)
+            }
+            "isLocked" -> {
+                val isLocked = isDeviceLocked()
+                println("🔍 isLocked llamado, retornando: $isLocked")
+                result.success(isLocked)
+            }
+            else -> {
+                println("❌ Método no implementado: ${call.method}")
+                result.notImplemented()
             }
         }
     }
+}
 
     private fun lockDevice(message: String): Boolean {
         return try {
             if (devicePolicyManager.isDeviceOwnerApp(packageName)) {
-                // Guardar mensaje en SharedPreferences
+                // Guardar estado de bloqueo
                 val prefs = getSharedPreferences("lock_prefs", Context.MODE_PRIVATE)
                 prefs.edit().apply {
                     putString("lock_message", message)
@@ -53,7 +58,11 @@ class MainActivity : FlutterActivity() {
                     apply()
                 }
 
-                // Iniciar LockScreenActivity
+                // Iniciar servicio de monitoreo persistente
+                val serviceIntent = Intent(this, LockMonitorService::class.java)
+                startForegroundService(serviceIntent)
+
+                // Iniciar LockScreenActivity inmediatamente
                 val intent = Intent(this, LockScreenActivity::class.java)
                 intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
                 startActivity(intent)
@@ -75,6 +84,11 @@ class MainActivity : FlutterActivity() {
                 putBoolean("is_locked", false)
                 apply()
             }
+            
+            // Detener servicio de monitoreo
+            val serviceIntent = Intent(this, LockMonitorService::class.java)
+            stopService(serviceIntent)
+            
             true
         } catch (e: Exception) {
             e.printStackTrace()
