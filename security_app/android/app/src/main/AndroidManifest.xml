@@ -1,26 +1,23 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-
+    <!-- ===== PERMISOS ESENCIALES ===== -->
     <uses-permission android:name="android.permission.INTERNET"/>
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC"/>
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
+    
+    <!-- Para el futuro cuando uses ubicación -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
-    <uses-permission android:name="android.permission.READ_CONTACTS"/>
-    <uses-permission android:name="android.permission.CAMERA"/>
-    <uses-permission android:name="android.permission.BATTERY_STATS"/>
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
-    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW"/>
-    <uses-permission android:name="android.permission.REORDER_TASKS"/>
-    <uses-permission android:name="android.permission.DISABLE_STATUS_BAR" />
-    <uses-permission android:name="android.permission.BIND_DEVICE_ADMIN" />
-    <uses-permission android:name="android.permission.MANAGE_DEVICE_ADMINS" />
-    <uses-permission android:name="android.permission.SYSTEM_OVERLAY_WINDOW" />
-    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE"/>
-
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION"/>
+    
+    <!-- Device Admin -->
+    <uses-permission android:name="android.permission.BIND_DEVICE_ADMIN"/>
 
     <application
-        android:label="JCA"
         android:name="${applicationName}"
-        android:icon="@mipmap/ic_launcher">
+        android:label="JCA"
+        android:icon="@mipmap/ic_launcher"
+        android:allowBackup="false">
 
         <!-- MAIN ACTIVITY -->
         <activity
@@ -31,62 +28,63 @@
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
             android:hardwareAccelerated="true"
             android:windowSoftInputMode="adjustResize">
+
             <meta-data
                 android:name="io.flutter.embedding.android.NormalTheme"
                 android:resource="@style/NormalTheme"/>
+
             <intent-filter>
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
         </activity>
 
-        <receiver
-    android:name=".BootReceiver"
-    android:enabled="true"
-    android:exported="true">
-    <intent-filter>
-        <action android:name="android.intent.action.BOOT_COMPLETED"/>
-    </intent-filter>
-</receiver>
-
-        <!-- ÚNICA LockScreenActivity -->
+        <!-- LOCK SCREEN -->
         <activity
             android:name=".LockScreenActivity"
+            android:exported="false"
             android:excludeFromRecents="true"
             android:launchMode="singleInstance"
             android:screenOrientation="portrait"
             android:theme="@android:style/Theme.NoTitleBar.Fullscreen"
-            android:showOnLockScreen="true"
-            android:immersive="true"/>
+            android:showOnLockScreen="true"/>
 
-        <!-- ÚNICO LockMonitorService -->
-<service
-    android:name=".LockMonitorService"
-    android:enabled="true"
-    android:exported="false"
-    android:foregroundServiceType="specialUse"
-    android:stopWithTask="false">
-    <!-- ✅ AGREGAR ESTO -->
-    <property
-        android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
-        android:value="security_monitoring"/>
-</service>
-        <!-- Device Admin Receiver -->
+        <!-- LOCK MONITOR SERVICE -->
+        <service
+            android:name=".LockMonitorService"
+            android:enabled="true"
+            android:exported="false"
+            android:foregroundServiceType="dataSync"
+            android:stopWithTask="false" />
+
+        <!-- DEVICE ADMIN RECEIVER -->
         <receiver
             android:name=".MyDeviceAdminReceiver"
-            android:exported="true"
-            android:permission="android.permission.BIND_DEVICE_ADMIN">
+            android:permission="android.permission.BIND_DEVICE_ADMIN"
+            android:exported="true">
+
             <meta-data
                 android:name="android.app.device_admin"
                 android:resource="@xml/device_admin_receiver"/>
+
             <intent-filter>
                 <action android:name="android.app.action.DEVICE_ADMIN_ENABLED"/>
+            </intent-filter>
+        </receiver>
+
+        <!-- BOOT RECEIVER -->
+        <receiver
+            android:name=".BootReceiver"
+            android:enabled="true"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED"/>
             </intent-filter>
         </receiver>
 
         <meta-data
             android:name="flutterEmbedding"
             android:value="2"/>
-    </application>
 
+    </application>
 </manifest>

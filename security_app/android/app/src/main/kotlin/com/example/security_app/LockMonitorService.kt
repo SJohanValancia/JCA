@@ -1,19 +1,17 @@
 package com.example.security_app
 
 import android.app.*
-import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
-import android.app.admin.DevicePolicyManager
+import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
 import androidx.core.app.NotificationCompat
-import okhttp3.*
-import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.OkHttpClient
+import okhttp3.Request
 import org.json.JSONObject
-import java.io.IOException
 
 class LockMonitorService : Service() {
 
@@ -25,119 +23,129 @@ class LockMonitorService : Service() {
     override fun onCreate() {
         super.onCreate()
 
-        createNotificationChannel()
-        val notification = createNotification()
-        startForeground(1, notification)
-
         println("🚀 LockMonitorService iniciado")
 
-        handler = Handler(Looper.getMainLooper())
-        checkRunnable = object : Runnable {
-            override fun run() {
-                checkLockStatusWithBackend()
-                handler.postDelayed(this, 10000) // Verificar cada 10 segundos
-            }
+        createNotificationChannel()
+        
+        // ✅ CRÍTICO: Especificar el tipo de servicio para Android 14+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            startForeground(
+                1, 
+                createNotification(), 
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
+            )
+        } else {
+            startForeground(1, createNotification())
         }
-        handler.postDelayed(checkRunnable, 2000) // Primera verificación después de 2 segundos
+
+        handler = Handler(Looper.getMainLooper())
+        checkRunnable = Runnable {
+            checkLockStatusWithBackend()
+            handler.postDelayed(checkRunnable, 3000)
+        }
+
+        handler.post(checkRunnable)
     }
 
     private fun checkLockStatusWithBackend() {
         Thread {
             try {
-                val prefs = getSharedPreferences("flutter.flutter_secure_storage", Context.MODE_PRIVATE)
-                val token = prefs.getString("flutter.token", null)
+                val securePrefs = getSharedPreferences(
+                    "flutter.flutter_secure_storage",
+                    Context.MODE_PRIVATE
+                )
+                val token = securePrefs.getString("flutter.token", null)
 
                 if (token == null) {
-                    println("⚠️ No hay token guardado, no se puede verificar")
+                    println("⚠️ Token no encontrado, apagando servicio")
+                    stopSelfSafely()
                     return@Thread
                 }
-
-                println("🌐 Verificando estado de bloqueo con backend...")
 
                 val request = Request.Builder()
                     .url("$baseUrl/api/lock/check")
                     .addHeader("Authorization", "Bearer $token")
-                    .addHeader("Content-Type", "application/json")
                     .get()
                     .build()
 
                 client.newCall(request).execute().use { response ->
-                    if (response.isSuccessful) {
-                        val responseBody = response.body?.string()
-                        println("📦 Response del backend: $responseBody")
+                    if (!response.isSuccessful) return@use
 
-                        val json = JSONObject(responseBody ?: "{}")
-                        val isLocked = json.optBoolean("isLocked", false)
-                        val lockMessage = json.optString("lockMessage", "Dispositivo bloqueado")
+                    val body = response.body?.string() ?: "{}"
+                    val json = JSONObject(body)
 
-                        println("🔍 Estado recibido - isLocked: $isLocked")
+                    val backendLocked = json.optBoolean("isLocked", false)
+                    val message = json.optString("lockMessage", "Dispositivo bloqueado")
 
-                        if (isLocked) {
-                            println("🔒 BLOQUEO DETECTADO - Activando pantalla de bloqueo")
-                            activateLockScreen(lockMessage)
-                        } else {
-                            println("✅ Dispositivo NO bloqueado")
-                            checkAndDeactivateLock()
-                        }
+                    if (backendLocked) {
+                        activateLockIfNeeded(message)
                     } else {
-                        println("❌ Error en response: ${response.code}")
+                        deactivateLockIfNeeded()
                     }
                 }
+
             } catch (e: Exception) {
-                println("❌ Error verificando con backend: ${e.message}")
-                e.printStackTrace()
+                println("❌ Error backend: ${e.message}")
             }
         }.start()
     }
 
-    private fun activateLockScreen(message: String) {
-        val localPrefs = getSharedPreferences("lock_prefs", Context.MODE_PRIVATE)
-        val isAlreadyLocked = localPrefs.getBoolean("is_locked", false)
+    private fun activateLockIfNeeded(message: String) {
+        val prefs = getSharedPreferences("lock_prefs", Context.MODE_PRIVATE)
 
-        if (!isAlreadyLocked) {
-            println("🔐 Guardando estado de bloqueo local")
-            localPrefs.edit().apply {
-                putBoolean("is_locked", true)
-                putString("lock_message", message)
-                apply()
-            }
+        if (prefs.getBoolean("is_locked", false)) return
 
-            println("📱 Lanzando LockScreenActivity")
-            val intent = Intent(this, LockScreenActivity::class.java)
-            intent.addFlags(
-                Intent.FLAG_ACTIVITY_NEW_TASK or
-                Intent.FLAG_ACTIVITY_CLEAR_TASK or
-                Intent.FLAG_ACTIVITY_NO_HISTORY or
-                Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS
-            )
-            startActivity(intent)
-        } else {
-            println("ℹ️ El dispositivo ya está bloqueado localmente")
+        println("🔒 Activando bloqueo")
+
+        prefs.edit()
+            .putBoolean("is_locked", true)
+            .putString("lock_message", message)
+            .apply()
+
+        val intent = Intent(this, LockScreenActivity::class.java).apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
         }
+        startActivity(intent)
     }
 
-    private fun checkAndDeactivateLock() {
-        val localPrefs = getSharedPreferences("lock_prefs", Context.MODE_PRIVATE)
-        val isLocked = localPrefs.getBoolean("is_locked", false)
+    private fun deactivateLockIfNeeded() {
+        val prefs = getSharedPreferences("lock_prefs", Context.MODE_PRIVATE)
 
-        if (isLocked) {
-            println("🔓 Desbloqueando dispositivo localmente")
-            localPrefs.edit().apply {
-                putBoolean("is_locked", false)
-                apply()
-            }
+        if (!prefs.getBoolean("is_locked", false)) {
+            stopSelfSafely()
+            return
         }
+
+        println("🔓 Desbloqueando")
+
+        prefs.edit().putBoolean("is_locked", false).apply()
+        sendBroadcast(Intent("com.example.security_app.UNLOCK_DEVICE"))
+        stopSelfSafely()
+    }
+
+    private fun stopSelfSafely() {
+        try {
+            handler.removeCallbacksAndMessages(null)
+        } catch (_: Exception) {}
+
+        stopForeground(true)
+        stopSelf()
+
+        println("🛑 LockMonitorService detenido")
     }
 
     override fun onDestroy() {
         super.onDestroy()
-        handler.removeCallbacks(checkRunnable)
-        println("⚠️ LockMonitorService destruido - Reiniciando...")
-
-        // Auto-reiniciar el servicio
-        val restartIntent = Intent(this, LockMonitorService::class.java)
-        startForegroundService(restartIntent)
+        try {
+            handler.removeCallbacksAndMessages(null)
+        } catch (_: Exception) {}
     }
+
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        return START_NOT_STICKY
+    }
+
+    override fun onBind(intent: Intent?): IBinder? = null
 
     private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -145,27 +153,18 @@ class LockMonitorService : Service() {
                 "lock_monitor",
                 "Monitoreo de Seguridad",
                 NotificationManager.IMPORTANCE_LOW
-            ).apply {
-                description = "Servicio de monitoreo de bloqueo activo"
-            }
-            val manager = getSystemService(NotificationManager::class.java)
-            manager.createNotificationChannel(channel)
+            )
+            getSystemService(NotificationManager::class.java)
+                .createNotificationChannel(channel)
         }
     }
 
     private fun createNotification(): Notification {
         return NotificationCompat.Builder(this, "lock_monitor")
             .setContentTitle("JCA Security")
-            .setContentText("Sistema de seguridad activo")
+            .setContentText("Monitoreo de seguridad activo")
             .setSmallIcon(R.drawable.ic_lock)
             .setOngoing(true)
-            .setPriority(NotificationCompat.PRIORITY_LOW)
             .build()
     }
-
-    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        return START_STICKY
-    }
-
-    override fun onBind(intent: Intent?): IBinder? = null
 }

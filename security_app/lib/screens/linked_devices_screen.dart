@@ -78,76 +78,81 @@ class _LinkedDevicesScreenState extends State<LinkedDevicesScreen> {
     _loadLockStates();
   }
 
-  Future<void> _unlockDevice(LinkedUserModel device) async {
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(20),
-        ),
-        title: const Row(
-          children: [
-            Icon(Icons.lock_open, color: Colors.green, size: 28),
-            SizedBox(width: 12),
-            Text('Desbloquear Dispositivo'),
-          ],
-        ),
-        content: Text(
-          '¿Deseas desbloquear el dispositivo de ${device.nombre}?',
-          style: const TextStyle(fontSize: 15),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancelar'),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.green,
-              foregroundColor: Colors.white,
-            ),
-            child: const Text('Desbloquear'),
-          ),
+Future<void> _unlockDevice(LinkedUserModel device) async {
+  final confirm = await showDialog<bool>(
+    context: context,
+    builder: (context) => AlertDialog(
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(20),
+      ),
+      title: const Row(
+        children: [
+          Icon(Icons.lock_open, color: Colors.green, size: 28),
+          SizedBox(width: 12),
+          Text('Desbloquear Dispositivo'),
         ],
+      ),
+      content: Text(
+        '¿Deseas desbloquear el dispositivo de ${device.nombre}?',
+        style: const TextStyle(fontSize: 15),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context, false),
+          child: const Text('Cancelar'),
+        ),
+        ElevatedButton(
+          onPressed: () => Navigator.pop(context, true),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: Colors.green,
+            foregroundColor: Colors.white,
+          ),
+          child: const Text('Desbloquear'),
+        ),
+      ],
+    ),
+  );
+
+  if (confirm == true) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const Center(
+        child: CircularProgressIndicator(),
       ),
     );
 
-    if (confirm == true) {
-      // Mostrar loading
-      showDialog(
-        context: context,
-        barrierDismissible: false,
-        builder: (context) => const Center(
-          child: CircularProgressIndicator(),
-        ),
-      );
-
-      final result = await _deviceOwnerService.unlockDevice(vendedorId: device.id);
+    print('🔓 Desbloqueando en backend...');
+    
+    final result = await _deviceOwnerService.unlockDevice(vendedorId: device.id);
+    
+    print('📡 Backend response: $result');
+    
+    if (mounted) {
+      Navigator.pop(context);
       
-      if (mounted) {
-        Navigator.pop(context); // Cerrar loading
+      if (result['success']) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('✅ Dispositivo desbloqueado\nEl bloqueo se quitará automáticamente en 3 segundos'),
+            backgroundColor: Colors.green,
+            duration: Duration(seconds: 4),
+          ),
+        );
         
-        if (result['success']) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('✅ ${device.nombre} desbloqueado'),
-              backgroundColor: Colors.green,
-            ),
-          );
-          _loadLockStates();
-        } else {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(result['message']),
-              backgroundColor: Colors.red,
-            ),
-          );
-        }
+        await Future.delayed(const Duration(seconds: 3));
+        _loadLockStates();
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(result['message']),
+            backgroundColor: Colors.red,
+          ),
+        );
       }
     }
   }
-
+}
   Future<void> _unlinkDevice(LinkedUserModel device) async {
     final confirm = await showDialog<bool>(
       context: context,

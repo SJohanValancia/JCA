@@ -193,4 +193,17 @@ Future<Map<String, dynamic>> checkLockStatus() async {
       return false;
     }
   }
+
+// Forzar desbloqueo de emergencia
+Future<bool> forceUnlock() async {
+  try {
+    print('🚨 Ejecutando desbloqueo de emergencia');
+    final result = await platform.invokeMethod('forceUnlock');
+    return result == true;
+  } on PlatformException catch (e) {
+    print('❌ Error en forceUnlock: ${e.message}');
+    return false;
+  }
+}
+
 }
