@@ -127,33 +127,62 @@ exports.unlockDevice = async (req, res) => {
   }
 };
 
+
 // En lockController.js:
+
 exports.checkLockStatus = async (req, res) => {
   try {
     const userId = req.user.id;
     
-    // Buscar al usuario
-    const user = await User.findById(userId).populate('dueno');
+    console.log('🔍 Verificando bloqueo para userId:', userId);
     
-    if (!user || user.rol !== 'vendedor') {
-      return res.json({ success: true, isLocked: false });
+    // Buscar al usuario
+    const user = await User.findById(userId);
+    
+    if (!user) {
+      return res.status(404).json({ 
+        success: false, 
+        isLocked: false,
+        message: 'Usuario no encontrado'
+      });
     }
 
-    // Buscar si hay un bloqueo activo para este DISPOSITIVO
-    const lockStatus = await LockStatus.findOne({
+    console.log('👤 Usuario encontrado - Rol:', user.rol);
+
+    // Si es dueño, nunca está bloqueado
+    if (user.rol === 'dueno') {
+      console.log('✅ Es dueño, no tiene bloqueo');
+      return res.json({ 
+        success: true, 
+        isLocked: false 
+      });
+    }
+
+    // Si es vendedor, buscar bloqueo activo en DeviceLock
+    const lockStatus = await DeviceLock.findOne({
       vendedorId: userId,
-      isActive: true
+      isLocked: true
     });
+
+    console.log('🔒 Estado de bloqueo encontrado:', lockStatus ? 'SÍ BLOQUEADO' : 'NO BLOQUEADO');
 
     res.json({
       success: true,
       isLocked: lockStatus ? true : false,
-      lockMessage: lockStatus?.message || null
+      lockMessage: lockStatus?.lockMessage || null,
+      lockedAt: lockStatus?.lockedAt || null
     });
+
   } catch (error) {
-    res.status(500).json({ success: false, isLocked: false });
+    console.error('❌ Error en checkLockStatus:', error);
+    res.status(500).json({ 
+      success: false, 
+      isLocked: false,
+      message: error.message 
+    });
   }
 };
+
 // Obtener estado de bloqueo de un vendedor específico (para el dueño)
 exports.getLockStatus = async (req, res) => {
   try {
