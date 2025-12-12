@@ -15,6 +15,13 @@ module.exports = async (req, res, next) => {
 
     // Verificar token
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    
+    // ✅ LOG para debug
+    console.log('🔐 Token decodificado:', {
+      userId: decoded.id,
+      timestamp: new Date().toISOString()
+    });
+    
     const user = await User.findById(decoded.id);
 
     if (!user) {
@@ -28,6 +35,7 @@ module.exports = async (req, res, next) => {
     next();
 
   } catch (error) {
+    console.error('❌ Error en authMiddleware:', error.message);
     res.status(401).json({
       success: false,
       message: 'Token inválido'
