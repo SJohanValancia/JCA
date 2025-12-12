@@ -3,6 +3,7 @@ import 'package:http/http.dart' as http;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../models/user_model.dart';
 import 'lock_polling_service.dart'; // ✅ IMPORTAR
+import 'package:device_info_plus/device_info_plus.dart';
 
 class AuthService {
   static const String baseUrl = 'https://jca-labd.onrender.com';
@@ -60,72 +61,66 @@ class AuthService {
     }
   }
 
-  Future<Map<String, dynamic>> login({
-    required String usuario,
-    required String password,
-  }) async {
-    try {
-      final response = await http.post(
-        Uri.parse('$baseUrl/api/auth/login'),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({
-          'usuario': usuario,
-          'password': password,
-        }),
-      ).timeout(_timeout);
+// Modificar el método login en auth_service.dart:
+Future<Map<String, dynamic>> login({
+  required String usuario,
+  required String password,
+}) async {
+  try {
+    final response = await http.post(
+      Uri.parse('$baseUrl/api/auth/login'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({'usuario': usuario, 'password': password}),
+    ).timeout(_timeout);
 
-      final data = jsonDecode(response.body);
+    final data = jsonDecode(response.body);
 
-      print('===== RESPUESTA DEL SERVIDOR =====');
-      print('Status Code: ${response.statusCode}');
-      print('Success: ${data['success']}');
-      if (data['usuario'] != null) {
-        print('User ID: ${data['usuario']['_id']}');
-        print('JC-ID: ${data['usuario']['jcId']}');
-        print('Rol: ${data['usuario']['rol']}');
+    if (response.statusCode == 200 && data['success']) {
+      await storage.write(key: 'token', value: data['token']);
+      
+      final user = UserModel.fromJson(data['usuario']);
+      await storage.write(key: 'user', value: jsonEncode(user.toJson()));
+
+      // ✅ SI ES VENDEDOR, REGISTRAR DISPOSITIVO
+      if (user.isVendedor) {
+        await _registrarDispositivo();
       }
-      print('==================================');
 
-      if (response.statusCode == 200 && data['success']) {
-        // ✅ Guardar token, user Y userId
-        await storage.write(key: 'token', value: data['token']);
-        await storage.write(key: 'user', value: jsonEncode(data['usuario']));
-        await storage.write(key: 'userId', value: data['usuario']['_id']);
-        
-        print('✅ Login exitoso - User ID: ${data['usuario']['_id']}');
-        print('✅ Token guardado: ${data['token'].substring(0, 20)}...');
-        
-        // ✅ INICIAR POLLING SOLO SI ES VENDEDOR
-        if (data['usuario']['rol'] == 'vendedor') {
-          print('🔄 Usuario es vendedor, iniciando polling de bloqueo...');
-          Future.delayed(const Duration(seconds: 2), () {
-            final lockPolling = LockPollingService();
-            lockPolling.startPolling();
-          });
-        } else {
-          print('👤 Usuario es dueño, no se inicia polling');
-        }
-        
-        return {
-          'success': true,
-          'message': data['message'],
-          'user': UserModel.fromJson(data['usuario']),
-        };
-      } else {
-        return {
-          'success': false,
-          'message': data['message'] ?? 'Error en el login',
-        };
-      }
-    } catch (e) {
-      print('❌ Error en login: $e');
-      return {
-        'success': false,
-        'message': 'Error de conexión: No se pudo conectar al servidor',
-      };
+      return {'success': true, 'message': data['message'], 'user': user};
     }
+    
+    return {'success': false, 'message': data['message']};
+  } catch (e) {
+    return {'success': false, 'message': 'Error de conexión'};
   }
+}
 
+Future<void> _registrarDispositivo() async {
+  try {
+    final deviceInfo = DeviceInfoPlugin();
+    final androidInfo = await deviceInfo.androidInfo;
+    
+    final token = await storage.read(key: 'token');
+    
+    await http.post(
+      Uri.parse('$baseUrl/api/auth/registrar-dispositivo'),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token',
+      },
+      body: jsonEncode({
+        'deviceId': androidInfo.id,
+        'deviceInfo': {
+          'modelo': androidInfo.model,
+          'marca': androidInfo.brand,
+          'version': androidInfo.version.release,
+        }
+      }),
+    );
+  } catch (e) {
+    print('Error registrando dispositivo: $e');
+  }
+}
   Future<bool> isLoggedIn() async {
     String? token = await storage.read(key: 'token');
     return token != null;

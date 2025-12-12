@@ -67,29 +67,30 @@ void startPolling() {
   }
 
   // Activar bloqueo nativo
-  Future<void> _activateNativeLock(String message) async {
-    try {
-      final isCurrentlyLocked = await platform.invokeMethod('isLocked');
+Future<void> _activateNativeLock(String message) async {
+  try {
+    final isCurrentlyLocked = await platform.invokeMethod('isLocked');
+    
+    if (isCurrentlyLocked != true) {
+      print('🔐 Activando bloqueo nativo...');
+      final result = await platform.invokeMethod('lockDevice', {
+        'message': message,
+      });
       
-      if (isCurrentlyLocked != true) {
-        print('🔐 Activando bloqueo nativo...');
-        final result = await platform.invokeMethod('lockDevice', {
-          'message': message,
-        });
-        
-        if (result == true) {
-          print('✅ Bloqueo nativo activado exitosamente');
-        } else {
-          print('⚠️ No se pudo activar el bloqueo nativo');
-        }
+      if (result == true) {
+        print('✅ Bloqueo nativo activado exitosamente');
+        // Forzar cierre de app Flutter si está abierta
+        SystemChannels.platform.invokeMethod<void>('SystemNavigator.pop');
       } else {
-        print('ℹ️ El dispositivo ya está bloqueado');
+        print('⚠️ No se pudo activar el bloqueo nativo');
       }
-    } catch (e) {
-      print('❌ Error activando bloqueo nativo: $e');
+    } else {
+      print('ℹ️ El dispositivo ya está bloqueado');
     }
+  } catch (e) {
+    print('❌ Error activando bloqueo nativo: $e');
   }
-
+}
   // Desactivar bloqueo nativo
 // Desactivar bloqueo nativo
 Future<void> _deactivateNativeLock() async {

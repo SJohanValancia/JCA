@@ -39,6 +39,12 @@ override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
                 println("🔍 isLocked llamado, retornando: $isLocked")
                 result.success(isLocked)
             }
+            // ✅ AGREGAR ESTE NUEVO CASO AQUÍ
+            "startMonitorService" -> {
+                val serviceIntent = Intent(this, LockMonitorService::class.java)
+                startForegroundService(serviceIntent)
+                result.success(true)
+            }
             else -> {
                 println("❌ Método no implementado: ${call.method}")
                 result.notImplemented()

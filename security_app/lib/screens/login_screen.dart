@@ -6,6 +6,10 @@ import 'register_screen.dart';
 import 'home_screen.dart';
 import 'vendor_home_screen.dart';
 import 'device_owner_setup_screen.dart';
+import '../services/device_owner_service.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter/services.dart'; // Ya debería estar
+import '../services/lock_polling_service.dart'; // Agregar esta línea si no está
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -57,52 +61,99 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
-  Future<void> _login() async {
-    if (!_formKey.currentState!.validate()) return;
+Future<void> _login() async {
+  if (!_formKey.currentState!.validate()) return;
 
-    setState(() => _isLoading = true);
+  setState(() => _isLoading = true);
 
-    final result = await _authService.login(
-      usuario: _usuarioController.text.trim(),
-      password: _passwordController.text,
-    );
+  final result = await _authService.login(
+    usuario: _usuarioController.text.trim(),
+    password: _passwordController.text,
+  );
 
-    if (!mounted) return;
+  if (!mounted) return;
+  
+  setState(() => _isLoading = false);
+
+  if (result['success']) {
+    final user = result['user'] as UserModel;
     
-    setState(() => _isLoading = false);
-
-    if (result['success']) {
-      final user = result['user'] as UserModel;
-      
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(result['message']),
-          backgroundColor: Colors.green,
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-      
-      // Redirigir según rol
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(
-          builder: (context) => user.isVendedor 
-              ? const VendorHomeScreen() 
-              : const HomeScreen(),
-        ),
-      );
+if (user.isVendedor) {
+  print('🔍 Vendedor detectado, verificando bloqueo...');
+  
+  final deviceOwnerService = DeviceOwnerService();
+  final lockStatus = await deviceOwnerService.checkLockStatus();
+  
+  print('📊 Estado de bloqueo: $lockStatus');
+  
+  // ✅ INICIAR SERVICIO DE MONITOREO NATIVO
+  try {
+    const platform = MethodChannel('com.example.security_app/device_owner');
+    await platform.invokeMethod('startMonitorService');
+    print('✅ Servicio de monitoreo iniciado');
+  } catch (e) {
+    print('❌ Error iniciando servicio: $e');
+  }
+  
+  // ✅ INICIAR POLLING FLUTTER
+  LockPollingService().startPolling();
+  
+  if (lockStatus['isLocked'] == true) {
+    print('🔒 DISPOSITIVO BLOQUEADO - Activando bloqueo nativo');
+    
+    final message = lockStatus['lockMessage'] ?? 'Dispositivo bloqueado';
+    final success = await deviceOwnerService.activateNativeLock(message);
+    
+    if (success) {
+      print('✅ Bloqueo nativo activado exitosamente');
+      SystemNavigator.pop();
+      return;
     } else {
+      print('❌ Error activando bloqueo nativo');
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(result['message']),
+          content: Text('Dispositivo bloqueado: $message. Error activando bloqueo.'),
           backgroundColor: Colors.red,
           behavior: SnackBarBehavior.floating,
         ),
       );
+      await _authService.logout();
+      return;
     }
+  } else {
+    print('✅ Dispositivo NO bloqueado, permitiendo acceso');
   }
+}
 
-  @override
+    // Solo si no está bloqueado o es dueño
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(result['message']),
+        backgroundColor: Colors.green,
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+
+    // Redirigir según rol
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(
+        builder: (context) => user.isVendedor
+            ? const VendorHomeScreen()
+            : const HomeScreen(),
+      ),
+    );
+  } else {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(result['message']),
+        backgroundColor: Colors.red,
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+}
+ @override
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: _handleTap,

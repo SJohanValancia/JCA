@@ -5,10 +5,9 @@ import '../models/user_model.dart';
 import '../models/linked_user_model.dart';
 import '../services/auth_service.dart';
 import '../services/link_service.dart';
-import '../services/device_owner_service.dart'; // ✅ AGREGAR
+import '../services/lock_polling_service.dart';
 import 'login_screen.dart';
 import 'qr_display_screen.dart';
-import 'lock_message_screen.dart'; // ✅ AGREGAR
 
 class VendorHomeScreen extends StatefulWidget {
   const VendorHomeScreen({super.key});
@@ -20,7 +19,6 @@ class VendorHomeScreen extends StatefulWidget {
 class _VendorHomeScreenState extends State<VendorHomeScreen> {
   final _authService = AuthService();
   final _linkService = LinkService();
-  final _deviceOwnerService = DeviceOwnerService(); // ✅ AGREGAR
   UserModel? _currentUser;
   bool _isLoading = true;
   
@@ -33,28 +31,16 @@ class _VendorHomeScreenState extends State<VendorHomeScreen> {
     super.initState();
     _loadUserData();
     _startRequestChecker();
-    _checkLockStatus(); // ✅ YA ESTÁ
+    
+    // ✅ INICIAR POLLING CONTINUO
+    LockPollingService().startPolling();
   }
 
-  // ✅ Verificar si el dispositivo está bloqueado
-  Future<void> _checkLockStatus() async {
-    final status = await _deviceOwnerService.checkLockStatus();
-    
-    if (status['isLocked'] == true && mounted) {
-      // Dispositivo bloqueado, mostrar pantalla de bloqueo
-      Navigator.of(context).pushAndRemoveUntil(
-        MaterialPageRoute(
-          builder: (context) => LockMessageScreen(
-            message: status['lockMessage'] ?? 'Dispositivo bloqueado',
-            lockedBy: status['lockedBy']?['nombre'] ?? 'Administrador',
-            lockedAt: status['lockedAt'] != null 
-                ? DateTime.parse(status['lockedAt']) 
-                : DateTime.now(),
-          ),
-        ),
-        (route) => false,
-      );
-    }
+  @override
+  void dispose() {
+    _requestCheckTimer?.cancel();
+    LockPollingService().stopPolling(); // ✅ DETENER POLLING
+    super.dispose();
   }
 
   Future<void> _loadUserData() async {
@@ -68,10 +54,7 @@ class _VendorHomeScreenState extends State<VendorHomeScreen> {
   void _startRequestChecker() {
     _requestCheckTimer = Timer.periodic(
       const Duration(seconds: 30),
-      (timer) {
-        _checkPendingRequests();
-        _checkLockStatus(); // ✅ También verificar bloqueo cada 30 segundos
-      },
+      (timer) => _checkPendingRequests(),
     );
   }
 
@@ -721,11 +704,5 @@ class _VendorHomeScreenState extends State<VendorHomeScreen> {
         ),
       ],
     );
-  }
-
-  @override
-  void dispose() {
-    _requestCheckTimer?.cancel();
-    super.dispose();
   }
 }

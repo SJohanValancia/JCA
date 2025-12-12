@@ -42,6 +42,17 @@ const userSchema = new mongoose.Schema({
     default: 'dueno',
     required: true
   },
+  deviceId: {
+  type: String,
+  default: null,
+  index: true  // Para búsquedas rápidas
+},
+deviceInfo: {
+  modelo: String,
+  marca: String,
+  version: String,
+  registradoEn: Date
+},
   // ✅ Información de deuda (se actualiza desde el dueño)
   deudaInfo: {
     deudaTotal: { type: Number, default: 0 },

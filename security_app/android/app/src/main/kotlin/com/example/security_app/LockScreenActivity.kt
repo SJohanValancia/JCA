@@ -1,3 +1,4 @@
+// android/app/src/main/kotlin/com/example/security_app/LockScreenActivity.kt
 package com.example.security_app
 
 import android.app.Activity
@@ -29,9 +30,10 @@ class LockScreenActivity : Activity() {
         devicePolicyManager = getSystemService(Context.DEVICE_POLICY_SERVICE) as DevicePolicyManager
         adminComponent = ComponentName(this, MyDeviceAdminReceiver::class.java)
 
-        // Deshabilitar keyguard
+        // Deshabilitar keyguard y status bar completamente
         if (devicePolicyManager.isDeviceOwnerApp(packageName)) {
             devicePolicyManager.setKeyguardDisabled(adminComponent, true)
+            devicePolicyManager.setStatusBarDisabled(adminComponent, true)  // Deshabilitar status bar
             devicePolicyManager.setLockTaskPackages(adminComponent, arrayOf(packageName))
         }
 
@@ -54,7 +56,7 @@ class LockScreenActivity : Activity() {
         // Verificación periódica de desbloqueo
         startUnlockCheck()
         
-        // Forzar foco constantemente
+        // Forzar foco constantemente cada 500ms
         startForceFocus()
     }
 
@@ -64,29 +66,35 @@ class LockScreenActivity : Activity() {
             WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON or
             WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD or
             WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
-            WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON or
-            WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
+            WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON
         )
-
+        
         window.decorView.systemUiVisibility = (
-            View.SYSTEM_UI_FLAG_LAYOUT_STABLE
-            or View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
-            or View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
-            or View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
-            or View.SYSTEM_UI_FLAG_FULLSCREEN
-            or View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+            View.SYSTEM_UI_FLAG_HIDE_NAVIGATION or
+            View.SYSTEM_UI_FLAG_FULLSCREEN or
+            View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY or
+            View.SYSTEM_UI_FLAG_LAYOUT_STABLE or
+            View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION or
+            View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN or
+            View.SYSTEM_UI_FLAG_LOW_PROFILE
         )
     }
 
     private fun startForceFocus() {
         handler = android.os.Handler(mainLooper)
-        focusRunnable = object : Runnable {
-            override fun run() {
-                // Mover esta actividad al frente constantemente
-                val activityManager = getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
-                activityManager.moveTaskToFront(taskId, 0)
-                handler.postDelayed(this, 500) // Cada 0.5 segundos
+        focusRunnable = Runnable {
+            // Forzar foco y fullscreen
+            setupFullscreen()
+            
+            val activityManager = getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
+            activityManager.moveTaskToFront(taskId, ActivityManager.MOVE_TASK_WITH_HOME)
+            
+            // Bloquear recents y home
+            if (devicePolicyManager.isDeviceOwnerApp(packageName)) {
+
             }
+            
+            handler.postDelayed(focusRunnable, 500)  // Cada 500ms
         }
         handler.post(focusRunnable)
     }
@@ -103,20 +111,29 @@ class LockScreenActivity : Activity() {
                     stopLockTask()
                     if (devicePolicyManager.isDeviceOwnerApp(packageName)) {
                         devicePolicyManager.setKeyguardDisabled(adminComponent, false)
+                        devicePolicyManager.setStatusBarDisabled(adminComponent, false)
                         devicePolicyManager.setLockTaskPackages(adminComponent, arrayOf())
                     }
                     handler.removeCallbacks(focusRunnable)
-                    finish()
+                    finishAndRemoveTask()
                 } else {
-                    unlockHandler.postDelayed(this, 3000)
+                    unlockHandler.postDelayed(this, 2000)  // Verificar cada 2s
                 }
             }
         }
-        unlockHandler.postDelayed(runnable, 3000)
+        unlockHandler.postDelayed(runnable, 2000)
     }
 
     override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
-        // Bloquear TODOS los botones
+        // Bloquear TODOS los botones físicos (volumen, power, etc.)
+        return true
+    }
+
+    override fun onKeyUp(keyCode: Int, event: KeyEvent?): Boolean {
+        return true
+    }
+
+    override fun dispatchKeyEvent(event: KeyEvent?): Boolean {
         return true
     }
 
@@ -129,29 +146,31 @@ class LockScreenActivity : Activity() {
         if (hasFocus) {
             setupFullscreen()
         } else {
-            // Si pierde el foco, recuperarlo inmediatamente
+            // Recuperar foco inmediatamente
             val activityManager = getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
             activityManager.moveTaskToFront(taskId, 0)
+            startActivity(Intent(this, LockScreenActivity::class.java).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            })
         }
     }
 
     override fun onPause() {
         super.onPause()
-        // Forzar regreso inmediato
+        // Forzar regreso
         val activityManager = getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
         activityManager.moveTaskToFront(taskId, 0)
     }
 
     override fun onStop() {
         super.onStop()
-        // Reiniciar la actividad si se detiene
         val prefs = getSharedPreferences("lock_prefs", Context.MODE_PRIVATE)
         val isLocked = prefs.getBoolean("is_locked", false)
         
         if (isLocked) {
-            val intent = Intent(this, LockScreenActivity::class.java)
-            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
-            startActivity(intent)
+            startActivity(Intent(this, LockScreenActivity::class.java).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
+            })
         }
     }
 

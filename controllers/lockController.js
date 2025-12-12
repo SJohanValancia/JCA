@@ -127,47 +127,33 @@ exports.unlockDevice = async (req, res) => {
   }
 };
 
-// Verificar estado de bloqueo (para el vendedor)
+// En lockController.js:
 exports.checkLockStatus = async (req, res) => {
   try {
-    const vendedorId = req.user.id;
-
-    console.log('🔍 Verificando estado de bloqueo para:', vendedorId);
-
-    const deviceLock = await DeviceLock.findOne({
-      vendedorId,
-      isLocked: true
-    }).populate('duenoId', 'nombre jcId');
-
-    if (deviceLock) {
-      console.log('⚠️ Dispositivo bloqueado');
-      return res.json({
-        success: true,
-        isLocked: true,
-        lockMessage: deviceLock.lockMessage,
-        lockedAt: deviceLock.lockedAt,
-        lockedBy: {
-          nombre: deviceLock.duenoId.nombre,
-          jcId: deviceLock.duenoId.jcId
-        }
-      });
+    const userId = req.user.id;
+    
+    // Buscar al usuario
+    const user = await User.findById(userId).populate('dueno');
+    
+    if (!user || user.rol !== 'vendedor') {
+      return res.json({ success: true, isLocked: false });
     }
 
-    console.log('✅ Dispositivo no bloqueado');
+    // Buscar si hay un bloqueo activo para este DISPOSITIVO
+    const lockStatus = await LockStatus.findOne({
+      vendedorId: userId,
+      isActive: true
+    });
+
     res.json({
       success: true,
-      isLocked: false
+      isLocked: lockStatus ? true : false,
+      lockMessage: lockStatus?.message || null
     });
-
   } catch (error) {
-    console.error('❌ Error verificando estado:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Error en el servidor'
-    });
+    res.status(500).json({ success: false, isLocked: false });
   }
 };
-
 // Obtener estado de bloqueo de un vendedor específico (para el dueño)
 exports.getLockStatus = async (req, res) => {
   try {

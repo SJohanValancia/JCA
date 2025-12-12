@@ -101,6 +101,33 @@ exports.registro = async (req, res) => {
 }
 };
 
+// En authController.js, agregar:
+exports.registrarDispositivo = async (req, res) => {
+  try {
+    const { deviceId, deviceInfo } = req.body;
+    const userId = req.user.id;
+
+    const user = await User.findByIdAndUpdate(
+      userId,
+      { 
+        deviceId,
+        deviceInfo: {
+          ...deviceInfo,
+          registradoEn: new Date()
+        }
+      },
+      { new: true }
+    );
+
+    res.json({
+      success: true,
+      message: 'Dispositivo registrado'
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
 // Login de usuario
 exports.login = async (req, res) => {
   try {
