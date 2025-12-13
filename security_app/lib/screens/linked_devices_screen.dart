@@ -2,9 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../models/linked_user_model.dart';
 import '../services/link_service.dart';
+import '../services/auth_service.dart';
 import 'debt_config_screen.dart';
 import 'block_device_dialog.dart';
 import '../services/device_owner_service.dart';
+import '../services/app_protection_service.dart';
+import 'login_screen.dart';
 
 class LinkedDevicesScreen extends StatefulWidget {
   const LinkedDevicesScreen({super.key});
@@ -16,9 +19,12 @@ class LinkedDevicesScreen extends StatefulWidget {
 class _LinkedDevicesScreenState extends State<LinkedDevicesScreen> {
   final _linkService = LinkService();
   final _deviceOwnerService = DeviceOwnerService();
+  final _appProtectionService = AppProtectionService();
+  final _authService = AuthService();
   List<LinkedUserModel> _linkedDevices = [];
   bool _isLoading = true;
   final Map<String, bool> _lockStates = {};
+  int _pinAttempts = 0;
 
   @override
   void initState() {
@@ -37,7 +43,6 @@ class _LinkedDevicesScreenState extends State<LinkedDevicesScreen> {
         _isLoading = false;
       });
       
-      // Cargar estados de bloqueo
       _loadLockStates();
     }
   }
@@ -74,85 +79,85 @@ class _LinkedDevicesScreenState extends State<LinkedDevicesScreen> {
       builder: (context) => BlockDeviceDialog(vendedor: device),
     );
     
-    // Recargar estados después de bloquear
     _loadLockStates();
   }
 
-Future<void> _unlockDevice(LinkedUserModel device) async {
-  final confirm = await showDialog<bool>(
-    context: context,
-    builder: (context) => AlertDialog(
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(20),
-      ),
-      title: const Row(
-        children: [
-          Icon(Icons.lock_open, color: Colors.green, size: 28),
-          SizedBox(width: 12),
-          Text('Desbloquear Dispositivo'),
-        ],
-      ),
-      content: Text(
-        '¿Deseas desbloquear el dispositivo de ${device.nombre}?',
-        style: const TextStyle(fontSize: 15),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context, false),
-          child: const Text('Cancelar'),
-        ),
-        ElevatedButton(
-          onPressed: () => Navigator.pop(context, true),
-          style: ElevatedButton.styleFrom(
-            backgroundColor: Colors.green,
-            foregroundColor: Colors.white,
-          ),
-          child: const Text('Desbloquear'),
-        ),
-      ],
-    ),
-  );
-
-  if (confirm == true) {
-    showDialog(
+  Future<void> _unlockDevice(LinkedUserModel device) async {
+    final confirm = await showDialog<bool>(
       context: context,
-      barrierDismissible: false,
-      builder: (context) => const Center(
-        child: CircularProgressIndicator(),
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+        ),
+        title: const Row(
+          children: [
+            Icon(Icons.lock_open, color: Colors.green, size: 28),
+            SizedBox(width: 12),
+            Text('Desbloquear Dispositivo'),
+          ],
+        ),
+        content: Text(
+          '¿Deseas desbloquear el dispositivo de ${device.nombre}?',
+          style: const TextStyle(fontSize: 15),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancelar'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.green,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Desbloquear'),
+          ),
+        ],
       ),
     );
 
-    print('🔓 Desbloqueando en backend...');
-    
-    final result = await _deviceOwnerService.unlockDevice(vendedorId: device.id);
-    
-    print('📡 Backend response: $result');
-    
-    if (mounted) {
-      Navigator.pop(context);
+    if (confirm == true) {
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => const Center(
+          child: CircularProgressIndicator(),
+        ),
+      );
+
+      print('🔓 Desbloqueando en backend...');
       
-      if (result['success']) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('✅ Dispositivo desbloqueado\nEl bloqueo se quitará automáticamente en 3 segundos'),
-            backgroundColor: Colors.green,
-            duration: Duration(seconds: 4),
-          ),
-        );
+      final result = await _deviceOwnerService.unlockDevice(vendedorId: device.id);
+      
+      print('📡 Backend response: $result');
+      
+      if (mounted) {
+        Navigator.pop(context);
         
-        await Future.delayed(const Duration(seconds: 3));
-        _loadLockStates();
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(result['message']),
-            backgroundColor: Colors.red,
-          ),
-        );
+        if (result['success']) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('✅ Dispositivo desbloqueado\nEl bloqueo se quitará automáticamente en 3 segundos'),
+              backgroundColor: Colors.green,
+              duration: Duration(seconds: 4),
+            ),
+          );
+          
+          await Future.delayed(const Duration(seconds: 3));
+          _loadLockStates();
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(result['message']),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
       }
     }
   }
-}
+
   Future<void> _unlinkDevice(LinkedUserModel device) async {
     final confirm = await showDialog<bool>(
       context: context,
@@ -202,6 +207,200 @@ Future<void> _unlockDevice(LinkedUserModel device) async {
             ),
           );
         }
+      }
+    }
+  }
+
+  // ✅ NUEVO: Diálogo de liberación de app con PIN
+  Future<void> _showReleaseAppDialog(LinkedUserModel device) async {
+    _pinAttempts = 0;
+    final pinController = TextEditingController();
+    
+    await showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => AlertDialog(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+        ),
+        title: const Row(
+          children: [
+            Icon(Icons.security, color: Colors.orange, size: 28),
+            SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                'Liberar App',
+                style: TextStyle(fontSize: 20),
+              ),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Ingresa el PIN para liberar la app del dispositivo de:',
+              style: TextStyle(fontSize: 14, color: Colors.grey[700]),
+            ),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: Colors.orange.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text(
+                device.nombre,
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.orange,
+                ),
+              ),
+            ),
+            const SizedBox(height: 20),
+            TextField(
+              controller: pinController,
+              obscureText: true,
+              keyboardType: TextInputType.number,
+              maxLength: 4,
+              decoration: InputDecoration(
+                labelText: 'PIN de Seguridad',
+                hintText: '0000',
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                prefixIcon: const Icon(Icons.pin),
+              ),
+            ),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.red.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.red.withOpacity(0.3)),
+              ),
+              child: const Row(
+                children: [
+                  Icon(Icons.warning, color: Colors.red, size: 20),
+                  SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      '⚠️ Después de liberar, el vendedor podrá desinstalar la app',
+                      style: TextStyle(fontSize: 12, color: Colors.red),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              pinController.dispose();
+              Navigator.pop(dialogContext);
+            },
+            child: const Text('Cancelar'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              final pin = pinController.text.trim();
+              
+              if (pin == '0000') {
+                // ✅ PIN correcto
+                pinController.dispose();
+                Navigator.pop(dialogContext);
+                _releaseAppWithConfirmation(device);
+              } else {
+                // ❌ PIN incorrecto
+                _pinAttempts++;
+                
+                if (_pinAttempts >= 3) {
+                  // Cerrar sesión después de 3 intentos
+                  pinController.dispose();
+                  Navigator.pop(dialogContext);
+                  await _authService.logout();
+                  
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('❌ 3 intentos fallidos. Sesión cerrada por seguridad.'),
+                        backgroundColor: Colors.red,
+                        duration: Duration(seconds: 4),
+                      ),
+                    );
+                    
+                    Navigator.pushReplacement(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const LoginScreen(),
+                      ),
+                    );
+                  }
+                } else {
+                  // Mostrar error
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(
+                        '❌ PIN incorrecto. Intento ${_pinAttempts}/3',
+                      ),
+                      backgroundColor: Colors.red,
+                      duration: const Duration(seconds: 2),
+                    ),
+                  );
+                  pinController.clear();
+                }
+              }
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.orange,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Confirmar'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ✅ NUEVO: Confirmar y ejecutar liberación
+  Future<void> _releaseAppWithConfirmation(LinkedUserModel device) async {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const Center(
+        child: CircularProgressIndicator(),
+      ),
+    );
+    
+    print('🔓 Liberando app del dispositivo...');
+    
+    final success = await _appProtectionService.releaseApp(device.id);
+    
+    if (mounted) {
+      Navigator.pop(context);
+      
+      if (success) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              '✅ App liberada en el dispositivo de ${device.nombre}\n'
+              'Ahora puede desinstalar la aplicación.',
+            ),
+            backgroundColor: Colors.green,
+            duration: const Duration(seconds: 5),
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('❌ Error al liberar la app'),
+            backgroundColor: Colors.red,
+          ),
+        );
       }
     }
   }
@@ -286,131 +485,137 @@ Future<void> _unlockDevice(LinkedUserModel device) async {
         borderRadius: BorderRadius.circular(16),
       ),
       elevation: 2,
-      child: InkWell(
-        onTap: () => _showDeviceDetails(device),
-        borderRadius: BorderRadius.circular(16),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Row(
-            children: [
-              Container(
-                width: 60,
-                height: 60,
-                decoration: BoxDecoration(
-                  color: const Color(0xFF2563EB).withOpacity(0.1),
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(
-                  Icons.person,
-                  color: Color(0xFF2563EB),
-                  size: 30,
-                ),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
+      child: Stack(
+        children: [
+          InkWell(
+            onTap: () => _showDeviceDetails(device),
+            borderRadius: BorderRadius.circular(16),
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Row(
+                children: [
+                  Container(
+                    width: 60,
+                    height: 60,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF2563EB).withOpacity(0.1),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      Icons.person,
+                      color: Color(0xFF2563EB),
+                      size: 30,
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Expanded(
-                          child: Text(
-                            device.nombre,
-                            style: const TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                            ),
+                        Text(
+                          device.nombre,
+                          style: const TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
                           ),
                         ),
-                        if (isLocked)
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 4,
+                        const SizedBox(height: 4),
+                        Row(
+                          children: [
+                            const Icon(Icons.badge, size: 14, color: Colors.grey),
+                            const SizedBox(width: 4),
+                            Text(
+                              device.jcId,
+                              style: const TextStyle(
+                                color: Colors.grey,
+                                fontFamily: 'monospace',
+                                fontSize: 12,
+                              ),
                             ),
-                            decoration: BoxDecoration(
-                              color: Colors.red.withOpacity(0.1),
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: const Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(Icons.lock, size: 14, color: Colors.red),
-                                SizedBox(width: 4),
-                                Text(
-                                  'Bloqueado',
-                                  style: TextStyle(
-                                    color: Colors.red,
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
+                          ],
+                        ),
                       ],
                     ),
-                    const SizedBox(height: 4),
-                    Row(
-                      children: [
-                        const Icon(Icons.badge, size: 14, color: Colors.grey),
-                        const SizedBox(width: 4),
-                        Text(
-                          device.jcId,
-                          style: const TextStyle(
-                            color: Colors.grey,
-                            fontFamily: 'monospace',
-                            fontSize: 12,
-                          ),
+                  ),
+                  if (device.isVendedor) ...[
+                    IconButton(
+                      onPressed: () => _openDebtConfig(device),
+                      icon: const Icon(Icons.settings, color: Color(0xFF8B5CF6)),
+                      tooltip: 'Configurar deuda',
+                    ),
+                    Container(
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: isLocked ? Colors.green : Colors.red,
+                          width: 2,
                         ),
-                      ],
+                      ),
+                      child: IconButton(
+                        onPressed: () {
+                          if (isLocked) {
+                            _unlockDevice(device);
+                          } else {
+                            _showBlockDialog(device);
+                          }
+                        },
+                        icon: Icon(
+                          isLocked ? Icons.lock_open : Icons.lock,
+                          color: isLocked ? Colors.green : Colors.red,
+                        ),
+                        tooltip: isLocked ? 'Desbloquear' : 'Bloquear',
+                      ),
+                    ),
+                  ],
+                  IconButton(
+                    onPressed: () => _unlinkDevice(device),
+                    icon: const Icon(Icons.link_off, color: Colors.red),
+                    tooltip: 'Desvincular',
+                  ),
+                ],
+              ),
+            ),
+          ),
+          if (isLocked)
+            Positioned(
+              top: 8,
+              right: 8,
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 6,
+                ),
+                decoration: BoxDecoration(
+                  color: Colors.red,
+                  borderRadius: BorderRadius.circular(12),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.red.withOpacity(0.3),
+                      blurRadius: 8,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+                ),
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.lock, size: 12, color: Colors.white),
+                    SizedBox(width: 4),
+                    Text(
+                      'BLOQUEADO',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 0.5,
+                      ),
                     ),
                   ],
                 ),
               ),
-              // Botones de acción solo para vendedores
-              if (device.isVendedor) ...[
-                // Botón de configuración de deuda
-                IconButton(
-                  onPressed: () => _openDebtConfig(device),
-                  icon: const Icon(Icons.settings, color: Color(0xFF8B5CF6)),
-                  tooltip: 'Configurar deuda',
-                ),
-                // Botón de bloqueo/desbloqueo
-                Container(
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    shape: BoxShape.circle,
-                    border: Border.all(
-                      color: isLocked ? Colors.green : Colors.red,
-                      width: 2,
-                    ),
-                  ),
-                  child: IconButton(
-                    onPressed: () {
-                      if (isLocked) {
-                        _unlockDevice(device);
-                      } else {
-                        _showBlockDialog(device);
-                      }
-                    },
-                    icon: Icon(
-                      isLocked ? Icons.lock_open : Icons.lock,
-                      color: isLocked ? Colors.green : Colors.red,
-                    ),
-                    tooltip: isLocked ? 'Desbloquear' : 'Bloquear',
-                  ),
-                ),
-              ],
-              // Botón de desvincular
-              IconButton(
-                onPressed: () => _unlinkDevice(device),
-                icon: const Icon(Icons.link_off, color: Colors.red),
-                tooltip: 'Desvincular',
-              ),
-            ],
-          ),
-        ),
+            ),
+        ],
       ),
     );
   }
@@ -527,6 +732,30 @@ Future<void> _unlockDevice(LinkedUserModel device) async {
               '@${device.usuario}',
             ),
             const SizedBox(height: 24),
+            
+            if (device.isVendedor) ...[
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: () {
+                    Navigator.pop(context);
+                    _showReleaseAppDialog(device);
+                  },
+                  icon: const Icon(Icons.lock_open),
+                  label: const Text('Liberar App del Dispositivo'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.orange,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+            ],
+            
             SizedBox(
               width: double.infinity,
               child: ElevatedButton.icon(

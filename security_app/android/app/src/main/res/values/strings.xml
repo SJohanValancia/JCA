@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">JCA</string>
+    
+    <!-- Mensajes de protección -->
+    <string name="uninstall_blocked_title">Aplicación Protegida</string>
+    <string name="uninstall_blocked_message">Esta aplicación no puede ser desinstalada por motivos de seguridad.</string>
+    <string name="device_owner_active">Device Owner Activo</string>
+</resources>

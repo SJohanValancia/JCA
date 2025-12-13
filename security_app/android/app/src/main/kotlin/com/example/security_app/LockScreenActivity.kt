@@ -3,12 +3,14 @@ package com.example.security_app
 import android.app.Activity
 import android.app.admin.DevicePolicyManager
 import android.content.BroadcastReceiver
+import android.app.ActivityManager 
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.os.Bundle
 import android.os.Handler
+import android.os.Looper
 import android.view.KeyEvent
 import android.view.View
 import android.view.WindowManager
@@ -18,6 +20,7 @@ import java.util.*
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.json.JSONObject
+import java.util.concurrent.TimeUnit
 
 class LockScreenActivity : Activity() {
     private lateinit var devicePolicyManager: DevicePolicyManager
@@ -26,18 +29,30 @@ class LockScreenActivity : Activity() {
     private lateinit var unlockReceiver: BroadcastReceiver
     private var isReceiverRegistered = false
     
-    // ✅ NUEVO: Cliente HTTP para consultar backend
-    private val client = OkHttpClient()
+    // ✅ Cliente HTTP configurado correctamente
+    private val client = OkHttpClient.Builder()
+        .connectTimeout(15, TimeUnit.SECONDS)
+        .readTimeout(15, TimeUnit.SECONDS)
+        .writeTimeout(15, TimeUnit.SECONDS)
+        .build()
     private val baseUrl = "https://jca-labd.onrender.com"
     private lateinit var backendCheckRunnable: Runnable
+    private var checkCount = 0
 
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-        
-        println("🔒 LockScreenActivity onCreate")
-        
-        setupFullscreen()
-        setContentView(R.layout.activity_lock_screen)
+    // ✅ NUEVO: Referencia al TextView de estado
+    private lateinit var lockStatus: TextView
+
+override fun onCreate(savedInstanceState: Bundle?) {
+    super.onCreate(savedInstanceState)
+    
+    println("🔒 ========== LockScreenActivity onCreate ==========")
+    
+    setupFullscreen()
+    
+    // ✅ NUEVO: Verificar y reiniciar servicio si es necesario
+    ensureServiceIsRunning()
+    
+    setContentView(R.layout.activity_lock_screen)
         
         window.addFlags(WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY)
         
@@ -48,15 +63,15 @@ class LockScreenActivity : Activity() {
             devicePolicyManager.setKeyguardDisabled(adminComponent, true)
             devicePolicyManager.setStatusBarDisabled(adminComponent, true)
             devicePolicyManager.setLockTaskPackages(adminComponent, arrayOf(packageName))
-            println("✅ Device Owner configurado")
+            println("✅ [LOCK] Device Owner configurado")
         }
 
         try {
             val serviceIntent = Intent(this, LockMonitorService::class.java)
             startForegroundService(serviceIntent)
-            println("✅ LockMonitorService iniciado")
+            println("✅ [LOCK] LockMonitorService iniciado")
         } catch (e: Exception) {
-            println("❌ Error iniciando servicio: ${e.message}")
+            println("❌ [LOCK] Error iniciando servicio: ${e.message}")
         }
 
         val prefs = getSharedPreferences("lock_prefs", Context.MODE_PRIVATE)
@@ -64,21 +79,55 @@ class LockScreenActivity : Activity() {
 
         findViewById<TextView>(R.id.lockMessage).text = message
         
+        // ✅ NUEVO: Leer timestamp de activación y formatear
+        val activationTime = prefs.getLong("lock_activation_time", System.currentTimeMillis())
+        val activationDate = Date(activationTime)
+        
         val dateFormat = SimpleDateFormat("dd 'de' MMMM 'de' yyyy", Locale("es", "ES"))
         val timeFormat = SimpleDateFormat("HH:mm", Locale.getDefault())
-        val now = Date()
         
-        findViewById<TextView>(R.id.lockDate).text = dateFormat.format(now)
-        findViewById<TextView>(R.id.lockTime).text = timeFormat.format(now)
+        findViewById<TextView>(R.id.lockDate).text = dateFormat.format(activationDate)
+        findViewById<TextView>(R.id.lockTime).text = timeFormat.format(activationDate)
+
+        // ✅ NUEVO: Inicializar TextView de estado y actualizar inicialmente
+        lockStatus = findViewById<TextView>(R.id.lockStatus)
+        updateStatus()
 
         startLockTask()
-        println("✅ Lock Task Mode activado")
+        println("✅ [LOCK] Lock Task Mode activado")
 
         registerUnlockReceiver()
         
-        // ✅ NUEVO: Iniciar verificación constante al backend
+        // ✅ Iniciar verificación al backend
         startBackendChecker()
+        
+        println("✅ ========== LockScreenActivity completamente inicializado ==========")
     }
+
+    private fun ensureServiceIsRunning() {
+    try {
+        val activityManager = getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
+        var isServiceRunning = false
+        
+        for (service in activityManager.getRunningServices(Int.MAX_VALUE)) {
+            if (LockMonitorService::class.java.name == service.service.className) {
+                isServiceRunning = true
+                break
+            }
+        }
+        
+        if (!isServiceRunning) {
+            println("⚠️ [LOCK] Servicio NO está corriendo - REINICIANDO")
+            val serviceIntent = Intent(this, LockMonitorService::class.java)
+            startForegroundService(serviceIntent)
+            println("✅ [LOCK] Servicio reiniciado")
+        } else {
+            println("✅ [LOCK] Servicio YA está corriendo")
+        }
+    } catch (e: Exception) {
+        println("❌ [LOCK] Error verificando servicio: ${e.message}")
+    }
+}
 
     private fun setupFullscreen() {
         window.addFlags(
@@ -100,21 +149,34 @@ class LockScreenActivity : Activity() {
         )
     }
 
-    // ✅ NUEVO: Verificar backend cada 5 segundos
+    // ✅ NUEVO: Método para actualizar el estado en tiempo real
+    private fun updateStatus() {
+        val prefs = getSharedPreferences("lock_prefs", Context.MODE_PRIVATE)
+        val isLocked = prefs.getBoolean("is_locked", false)
+        lockStatus.text = if (isLocked) "Bloqueado: Sí" else "Bloqueado: No"
+        println("🔄 [LOCK] Estado actualizado: ${lockStatus.text}")
+    }
+
+    // ✅ Iniciar verificación constante al backend
     private fun startBackendChecker() {
-        handler = Handler(mainLooper)
+        handler = Handler(Looper.getMainLooper())
         backendCheckRunnable = object : Runnable {
             override fun run() {
-                println("🌐 [LOCKSCREEN] Verificando estado en backend...")
+                checkCount++
+                println("🌐 [LOCK #$checkCount] ===== VERIFICANDO BACKEND =====")
                 checkBackendStatus()
+                
+                // ✅ NUEVO: Actualizar estado después de cada verificación
+                runOnUiThread { updateStatus() }
+                
                 handler.postDelayed(this, 5000) // ← CADA 5 SEGUNDOS
             }
         }
+        
+        // ✅ Primera verificación inmediata
         handler.post(backendCheckRunnable)
-        println("✅ Backend checker iniciado (cada 5 segundos)")
     }
 
-    // ✅ NUEVO: Consultar al backend si debe desbloquearse
     private fun checkBackendStatus() {
         Thread {
             try {
@@ -134,31 +196,21 @@ class LockScreenActivity : Activity() {
                 val request = Request.Builder()
                     .url("$baseUrl/api/lock/check")
                     .addHeader("Authorization", "Bearer $token")
-                    .get()
                     .build()
 
-                client.newCall(request).execute().use { response ->
-                    val statusCode = response.code
-                    println("📡 [LOCKSCREEN] Status Code: $statusCode")
+                val response = client.newCall(request).execute()
 
-                    if (!response.isSuccessful) {
-                        println("❌ [LOCKSCREEN] Backend no respondió correctamente")
-                        return@use
-                    }
+                println("📡 [LOCKSCREEN] Status: ${response.code}")
 
-                    val body = response.body?.string() ?: "{}"
+                if (response.isSuccessful) {
+                    val body = response.body?.string() ?: ""
                     println("📦 [LOCKSCREEN] Response: $body")
-
+                    
                     val json = JSONObject(body)
-                    val backendLocked = json.optBoolean("isLocked", true)
-                    val message = json.optString("lockMessage", "Dispositivo bloqueado")
+                    val isLocked = json.getBoolean("isLocked")
 
-                    println("🔍 [LOCKSCREEN] Backend dice isLocked = $backendLocked")
-
-                    if (backendLocked) {
-                        println("🔒 [LOCKSCREEN] Aún bloqueado, mantener pantalla")
-                    } else {
-                        println("🔓 [LOCKSCREEN] ¡DESBLOQUEADO! Iniciando cierre...")
+                    if (!isLocked) {
+                        println("🔓 [LOCKSCREEN] Backend indica desbloqueo - procediendo...")
                         
                         // ✅ Actualizar SharedPreferences
                         runOnUiThread {
@@ -184,7 +236,7 @@ class LockScreenActivity : Activity() {
             unlockReceiver = object : BroadcastReceiver() {
                 override fun onReceive(context: Context?, intent: Intent?) {
                     if (intent?.action == "com.example.security_app.UNLOCK_DEVICE") {
-                        println("📡 [LOCKSCREEN] Broadcast recibido")
+                        println("📡 [LOCK] ¡Broadcast de desbloqueo recibido!")
                         finishUnlock()
                     }
                 }
@@ -193,30 +245,30 @@ class LockScreenActivity : Activity() {
             val filter = IntentFilter("com.example.security_app.UNLOCK_DEVICE")
             registerReceiver(unlockReceiver, filter)
             isReceiverRegistered = true
-            println("✅ BroadcastReceiver registrado")
+            println("✅ [LOCK] BroadcastReceiver registrado")
         } catch (e: Exception) {
-            println("❌ Error registrando receiver: ${e.message}")
+            println("❌ [LOCK] Error registrando receiver: ${e.message}")
         }
     }
 
     private fun finishUnlock() {
-        println("🔓 [LOCKSCREEN] ========== EJECUTANDO DESBLOQUEO COMPLETO ==========")
+        println("🔓🔓🔓 [LOCK] ========== EJECUTANDO DESBLOQUEO COMPLETO ==========")
         
         try {
             // ✅ 1. Detener verificación de backend
             try {
                 handler.removeCallbacksAndMessages(null)
-                println("✅ [LOCKSCREEN] Handler detenido")
+                println("✅ [LOCK] Handler y verificaciones detenidas")
             } catch (e: Exception) {
-                println("⚠️ [LOCKSCREEN] Error deteniendo handler: ${e.message}")
+                println("⚠️ [LOCK] Error deteniendo handler: ${e.message}")
             }
 
             // ✅ 2. Detener Lock Task Mode
             try {
                 stopLockTask()
-                println("✅ [LOCKSCREEN] Lock Task detenido")
+                println("✅ [LOCK] Lock Task Mode detenido")
             } catch (e: Exception) {
-                println("⚠️ [LOCKSCREEN] Error deteniendo Lock Task: ${e.message}")
+                println("⚠️ [LOCK] Error deteniendo Lock Task: ${e.message}")
             }
             
             // ✅ 3. Restaurar Device Owner
@@ -225,10 +277,10 @@ class LockScreenActivity : Activity() {
                     devicePolicyManager.setKeyguardDisabled(adminComponent, false)
                     devicePolicyManager.setStatusBarDisabled(adminComponent, false)
                     devicePolicyManager.setLockTaskPackages(adminComponent, arrayOf())
-                    println("✅ [LOCKSCREEN] Device Owner restaurado")
+                    println("✅ [LOCK] Device Owner restaurado a valores normales")
                 }
             } catch (e: Exception) {
-                println("⚠️ [LOCKSCREEN] Error restaurando Device Owner: ${e.message}")
+                println("⚠️ [LOCK] Error restaurando Device Owner: ${e.message}")
             }
             
             // ✅ 4. Desregistrar broadcast receiver
@@ -236,44 +288,54 @@ class LockScreenActivity : Activity() {
                 try {
                     unregisterReceiver(unlockReceiver)
                     isReceiverRegistered = false
-                    println("✅ [LOCKSCREEN] Receiver desregistrado")
+                    println("✅ [LOCK] BroadcastReceiver desregistrado")
                 } catch (e: Exception) {
-                    println("⚠️ [LOCKSCREEN] Error desregistrando: ${e.message}")
+                    println("⚠️ [LOCK] Error desregistrando receiver: ${e.message}")
                 }
             }
             
-            // ✅ 5. Detener servicio de monitoreo
-            try {
-                val serviceIntent = Intent(this, LockMonitorService::class.java)
-                stopService(serviceIntent)
-                println("✅ [LOCKSCREEN] Servicio detenido")
-            } catch (e: Exception) {
-                println("⚠️ [LOCKSCREEN] Error deteniendo servicio: ${e.message}")
-            }
+            // ✅ 5. NO detener el servicio aquí, déjalo corriendo
+            println("ℹ️ [LOCK] Servicio de monitoreo permanece activo")
             
             // ✅ 6. Cerrar activity
+            println("🔓 [LOCK] Cerrando LockScreenActivity...")
             finishAndRemoveTask()
-            println("✅ [LOCKSCREEN] ========== DESBLOQUEO COMPLETO EXITOSO ==========")
+            println("✅✅✅ [LOCK] ========== DESBLOQUEO COMPLETO EXITOSO ==========")
             
         } catch (e: Exception) {
-            println("❌ [LOCKSCREEN] Error CRÍTICO en desbloqueo: ${e.message}")
+            println("❌❌❌ [LOCK] Error CRÍTICO en desbloqueo: ${e.message}")
             e.printStackTrace()
             
             try {
                 finish()
             } catch (ex: Exception) {
-                println("❌ [LOCKSCREEN] No se pudo cerrar: ${ex.message}")
+                println("❌ [LOCK] No se pudo cerrar activity: ${ex.message}")
             }
         }
     }
 
-    override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean = true
-    override fun onKeyUp(keyCode: Int, event: KeyEvent?): Boolean = true
-    override fun dispatchKeyEvent(event: KeyEvent?): Boolean = true
-    override fun onBackPressed() {}
+    override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
+        println("🚫 [LOCK] onKeyDown bloqueado: $keyCode")
+        return true
+    }
+    
+    override fun onKeyUp(keyCode: Int, event: KeyEvent?): Boolean {
+        println("🚫 [LOCK] onKeyUp bloqueado: $keyCode")
+        return true
+    }
+    
+    override fun dispatchKeyEvent(event: KeyEvent?): Boolean {
+        println("🚫 [LOCK] dispatchKeyEvent bloqueado")
+        return true
+    }
+    
+    override fun onBackPressed() {
+        println("🚫 [LOCK] Botón atrás bloqueado")
+    }
 
     override fun onWindowFocusChanged(hasFocus: Boolean) {
         super.onWindowFocusChanged(hasFocus)
+        println("👁️ [LOCK] Focus cambió: $hasFocus")
         if (hasFocus) {
             setupFullscreen()
         }
@@ -281,12 +343,23 @@ class LockScreenActivity : Activity() {
 
     override fun onDestroy() {
         super.onDestroy()
-        println("🔒 [LOCKSCREEN] onDestroy")
+        println("💀 [LOCK] onDestroy - Activity siendo destruida")
         
         try {
             handler.removeCallbacksAndMessages(null)
         } catch (e: Exception) {
-            println("⚠️ [LOCKSCREEN] Error limpiando: ${e.message}")
+            println("⚠️ [LOCK] Error en cleanup: ${e.message}")
         }
+    }
+
+    override fun onPause() {
+        super.onPause()
+        println("⏸️ [LOCK] onPause")
+    }
+
+    override fun onResume() {
+        super.onResume()
+        println("▶️ [LOCK] onResume")
+        setupFullscreen()
     }
 }

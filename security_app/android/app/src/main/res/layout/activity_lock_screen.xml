@@ -19,7 +19,7 @@
             android:layout_height="120dp"
             android:src="@drawable/ic_lock"
             android:tint="#FFFFFF"
-            android:layout_marginBottom="40dp"/>
+            android:layout_marginBottom="40dp" />
 
         <!-- Título -->
         <TextView
@@ -30,14 +30,14 @@
             android:textSize="28sp"
             android:textStyle="bold"
             android:letterSpacing="0.1"
-            android:layout_marginBottom="16dp"/>
+            android:layout_marginBottom="16dp" />
 
         <!-- Línea decorativa -->
         <View
             android:layout_width="60dp"
             android:layout_height="4dp"
             android:background="#80FFFFFF"
-            android:layout_marginBottom="32dp"/>
+            android:layout_marginBottom="32dp" />
 
         <!-- Mensaje de bloqueo -->
         <androidx.cardview.widget.CardView
@@ -60,7 +60,7 @@
                     android:layout_height="40dp"
                     android:src="@drawable/ic_error"
                     android:tint="#FFFFFF"
-                    android:layout_marginBottom="16dp"/>
+                    android:layout_marginBottom="16dp" />
 
                 <TextView
                     android:id="@+id/lockMessage"
@@ -70,7 +70,7 @@
                     android:textColor="#FFFFFF"
                     android:textSize="18sp"
                     android:gravity="center"
-                    android:lineSpacingExtra="4dp"/>
+                    android:lineSpacingExtra="4dp" />
             </LinearLayout>
         </androidx.cardview.widget.CardView>
 
@@ -101,7 +101,7 @@
                         android:layout_height="20dp"
                         android:src="@drawable/ic_calendar"
                         android:tint="#FFFFFF"
-                        android:layout_marginEnd="12dp"/>
+                        android:layout_marginEnd="12dp" />
 
                     <LinearLayout
                         android:layout_width="0dp"
@@ -114,7 +114,7 @@
                             android:layout_height="wrap_content"
                             android:text="Fecha de activación"
                             android:textColor="#B3FFFFFF"
-                            android:textSize="12sp"/>
+                            android:textSize="12sp" />
 
                         <TextView
                             android:id="@+id/lockDate"
@@ -124,7 +124,7 @@
                             android:textColor="#FFFFFF"
                             android:textSize="16sp"
                             android:textStyle="bold"
-                            android:layout_marginTop="4dp"/>
+                            android:layout_marginTop="4dp" />
                     </LinearLayout>
                 </LinearLayout>
 
@@ -132,21 +132,21 @@
                     android:layout_width="match_parent"
                     android:layout_height="1dp"
                     android:background="#4DFFFFFF"
-                    android:layout_marginVertical="12dp"/>
+                    android:layout_marginVertical="12dp" />
 
                 <!-- Hora -->
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:orientation="horizontal"
-                    android:layout_marginBottom="12dp">  <!-- ✅ Agregar margen para separar -->
+                    android:layout_marginBottom="12dp">
 
                     <ImageView
                         android:layout_width="20dp"
                         android:layout_height="20dp"
                         android:src="@drawable/ic_time"
                         android:tint="#FFFFFF"
-                        android:layout_marginEnd="12dp"/>
+                        android:layout_marginEnd="12dp" />
 
                     <LinearLayout
                         android:layout_width="0dp"
@@ -159,7 +159,7 @@
                             android:layout_height="wrap_content"
                             android:text="Hora de activación"
                             android:textColor="#B3FFFFFF"
-                            android:textSize="12sp"/>
+                            android:textSize="12sp" />
 
                         <TextView
                             android:id="@+id/lockTime"
@@ -169,7 +169,7 @@
                             android:textColor="#FFFFFF"
                             android:textSize="16sp"
                             android:textStyle="bold"
-                            android:layout_marginTop="4dp"/>
+                            android:layout_marginTop="4dp" />
                     </LinearLayout>
                 </LinearLayout>
 
@@ -177,9 +177,9 @@
                     android:layout_width="match_parent"
                     android:layout_height="1dp"
                     android:background="#4DFFFFFF"
-                    android:layout_marginVertical="12dp"/>
+                    android:layout_marginVertical="12dp" />
 
-                <!-- ✅ NUEVO: Estado de bloqueo -->
+                <!-- Estado local -->
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
@@ -188,9 +188,9 @@
                     <ImageView
                         android:layout_width="20dp"
                         android:layout_height="20dp"
-                        android:src="@drawable/ic_lock"  <!-- Usa un icono de lock, agrégalo si no existe -->
+                        android:src="@drawable/ic_lock"
                         android:tint="#FFFFFF"
-                        android:layout_marginEnd="12dp"/>
+                        android:layout_marginEnd="12dp" />
 
                     <LinearLayout
                         android:layout_width="0dp"
@@ -201,9 +201,9 @@
                         <TextView
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:text="Estado"
+                            android:text="Estado local"
                             android:textColor="#B3FFFFFF"
-                            android:textSize="12sp"/>
+                            android:textSize="12sp" />
 
                         <TextView
                             android:id="@+id/lockStatus"
@@ -213,14 +213,14 @@
                             android:textColor="#FFFFFF"
                             android:textSize="16sp"
                             android:textStyle="bold"
-                            android:layout_marginTop="4dp"/>
+                            android:layout_marginTop="4dp" />
                     </LinearLayout>
                 </LinearLayout>
 
             </LinearLayout>
         </androidx.cardview.widget.CardView>
 
-        <!-- Indicador de verificación -->
+        <!-- Verificación -->
         <LinearLayout
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
@@ -231,8 +231,8 @@
             <ProgressBar
                 android:layout_width="16dp"
                 android:layout_height="16dp"
-                android:indeterminateTint="#B3FFFFFF"
-                style="?android:attr/progressBarStyleSmall"/>
+                style="?android:attr/progressBarStyleSmall"
+                android:indeterminateTint="#B3FFFFFF" />
 
             <TextView
                 android:layout_width="wrap_content"
@@ -240,10 +240,9 @@
                 android:text="Verificando estado..."
                 android:textColor="#B3FFFFFF"
                 android:textSize="14sp"
-                android:layout_marginStart="12dp"/>
+                android:layout_marginStart="12dp" />
         </LinearLayout>
 
-        <!-- Mensaje informativo -->
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
@@ -251,7 +250,7 @@
             android:textColor="#B3FFFFFF"
             android:textSize="13sp"
             android:gravity="center"
-            android:lineSpacingExtra="4dp"/>
-    </LinearLayout>
+            android:lineSpacingExtra="4dp" />
 
+    </LinearLayout>
 </RelativeLayout>

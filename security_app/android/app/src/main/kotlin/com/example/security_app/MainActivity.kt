@@ -5,7 +5,7 @@ import android.app.admin.DevicePolicyManager
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
-import android.os.Bundle  // ✅ AGREGAR ESTE IMPORT
+import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import io.flutter.embedding.android.FlutterActivity
@@ -20,7 +20,6 @@ class MainActivity : FlutterActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         
-        // ✅ VERIFICAR SI HAY SESIÓN ACTIVA Y INICIAR SERVICIO
         checkAndStartMonitorService()
     }
 
@@ -83,32 +82,177 @@ class MainActivity : FlutterActivity() {
                     val success = forceUnlockDevice()
                     result.success(success)
                 }
-                else -> {
-                    println("❌ Método no implementado: ${call.method}")
-                    result.notImplemented()
+                "protectApp" -> {
+                    val success = protectAppFromUninstall()
+                    result.success(success)
                 }
+ "lockDownDevice" -> {
+        val success = lockDownDevice()
+        result.success(success)
+    }
+    "releaseApp" -> {
+        val vendorId = call.argument<String>("vendorId") ?: ""
+        val success = releaseApp(vendorId)
+        result.success(success)
+    }
+    "isAppProtected" -> {
+        val protected = isAppProtected()
+        result.success(protected)
+    }
+    
+    else -> {
+        println("❌ Método no implementado: ${call.method}")
+        result.notImplemented()
+    }
+}
+        }
+        
+        // ✅ Activar protección automáticamente
+        protectAppFromUninstall()
+        lockDownDevice()
+    }
+
+    // ✅ NUEVO: Protección contra desinstalación
+    private fun protectAppFromUninstall(): Boolean {
+        return try {
+            if (devicePolicyManager.isDeviceOwnerApp(packageName)) {
+                println("🔒 ========== ACTIVANDO PROTECCIÓN CONTRA DESINSTALACIÓN ==========")
+                
+                // Bloquear desinstalación
+                devicePolicyManager.setUninstallBlocked(adminComponent, packageName, true)
+                println("✅ App bloqueada contra desinstalación")
+                
+                // Intentar hacer la app del sistema (opcional)
+                try {
+                    devicePolicyManager.enableSystemApp(adminComponent, packageName)
+                    println("✅ App configurada como app del sistema")
+                } catch (e: Exception) {
+                    println("ℹ️ No se pudo configurar como app del sistema: ${e.message}")
+                }
+                
+                println("✅ ========== PROTECCIÓN COMPLETA ACTIVADA ==========")
+                true
+            } else {
+                println("❌ No es Device Owner - No se puede proteger")
+                false
             }
+        } catch (e: Exception) {
+            println("❌ Error protegiendo app: ${e.message}")
+            e.printStackTrace()
+            false
         }
     }
 
- private fun lockDevice(message: String): Boolean {
+    // ✅ NUEVO: Bloqueo extremo - Deshabilitar depuración USB
+private fun lockDownDevice(): Boolean {
     return try {
         if (devicePolicyManager.isDeviceOwnerApp(packageName)) {
-            println("🔒 Iniciando proceso de bloqueo")
+            println("🔒 ========== ACTIVANDO LOCKDOWN EXTREMO ==========")
             
-            val prefs = getSharedPreferences("lock_prefs", Context.MODE_PRIVATE)
+            // 1️⃣ Bloquear depuración USB
+            devicePolicyManager.addUserRestriction(adminComponent, "no_debugging_features")
+            println("✅ Depuración USB bloqueada")
+            
+            // 2️⃣ Ocultar opciones de desarrollador
+            devicePolicyManager.addUserRestriction(adminComponent, "no_config_credentials")
+            println("✅ Opciones de desarrollador ocultas")
+            
+            // 3️⃣ Bloquear instalación/desinstalación de apps
+            devicePolicyManager.addUserRestriction(adminComponent, "no_install_apps")
+            devicePolicyManager.addUserRestriction(adminComponent, "no_uninstall_apps")
+            println("✅ Instalación/desinstalación bloqueada")
+            
+            // 4️⃣ Bloquear factory reset
+            devicePolicyManager.addUserRestriction(adminComponent, "no_factory_reset")
+            println("✅ Factory reset bloqueado")
+            
+            // 5️⃣ Proteger la app
+            devicePolicyManager.setUninstallBlocked(adminComponent, packageName, true)
+            println("✅ App protegida contra desinstalación")
+            
+            // 6️⃣ Guardar estado de protección
+            val prefs = getSharedPreferences("app_protection", Context.MODE_PRIVATE)
+            prefs.edit().putBoolean("is_protected", true).apply()
+            
+            println("✅ ========== LOCKDOWN COMPLETO ACTIVADO ==========")
+            true
+        } else {
+            println("❌ No es Device Owner")
+            false
+        }
+    } catch (e: Exception) {
+        println("❌ Error en lockdown: ${e.message}")
+        e.printStackTrace()
+        false
+    }
+}
+
+// ✅ NUEVO: Liberar app (solo con PIN desde dueño)
+private fun releaseApp(vendorDeviceId: String): Boolean {
+    return try {
+        if (devicePolicyManager.isDeviceOwnerApp(packageName)) {
+            println("🔓 ========== LIBERANDO APP ==========")
+            
+            // 1️⃣ Habilitar depuración USB
+            devicePolicyManager.clearUserRestriction(adminComponent, "no_debugging_features")
+            println("✅ Depuración USB habilitada")
+            
+            // 2️⃣ Mostrar opciones de desarrollador
+            devicePolicyManager.clearUserRestriction(adminComponent, "no_config_credentials")
+            println("✅ Opciones de desarrollador visibles")
+            
+            // 3️⃣ Permitir desinstalación
+            devicePolicyManager.clearUserRestriction(adminComponent, "no_install_apps")
+            devicePolicyManager.clearUserRestriction(adminComponent, "no_uninstall_apps")
+            devicePolicyManager.setUninstallBlocked(adminComponent, packageName, false)
+            println("✅ Desinstalación permitida")
+            
+            // 4️⃣ Guardar estado
+            val prefs = getSharedPreferences("app_protection", Context.MODE_PRIVATE)
             prefs.edit().apply {
-                putString("lock_message", message)
-                putBoolean("is_locked", true)
-                putLong("lock_activation_time", System.currentTimeMillis())  // ✅ NUEVO: Almacenar timestamp de activación
+                putBoolean("is_protected", false)
+                putString("released_by", vendorDeviceId)
+                putLong("released_at", System.currentTimeMillis())
                 apply()
             }
-            println("✅ Estado guardado en SharedPreferences")
+            
+            println("✅ ========== APP LIBERADA - PUEDE SER DESINSTALADA ==========")
+            true
+        } else {
+            println("❌ No es Device Owner")
+            false
+        }
+    } catch (e: Exception) {
+        println("❌ Error liberando app: ${e.message}")
+        e.printStackTrace()
+        false
+    }
+}
+
+// ✅ NUEVO: Verificar estado de protección
+private fun isAppProtected(): Boolean {
+    val prefs = getSharedPreferences("app_protection", Context.MODE_PRIVATE)
+    return prefs.getBoolean("is_protected", true)
+}
+
+    private fun lockDevice(message: String): Boolean {
+        return try {
+            if (devicePolicyManager.isDeviceOwnerApp(packageName)) {
+                println("🔒 Iniciando proceso de bloqueo")
+                
+                val prefs = getSharedPreferences("lock_prefs", Context.MODE_PRIVATE)
+                prefs.edit().apply {
+                    putString("lock_message", message)
+                    putBoolean("is_locked", true)
+                    putLong("lock_activation_time", System.currentTimeMillis())
+                    apply()
+                }
+                println("✅ Estado guardado en SharedPreferences")
 
                 try {
                     val serviceIntent = Intent(this, LockMonitorService::class.java)
                     startForegroundService(serviceIntent)
-                    println("✅ LockMonitorService iniciado")
+                    println("✅ LockMonitorService iniciado/reiniciado")
                 } catch (e: Exception) {
                     println("❌ Error con servicio: ${e.message}")
                 }
