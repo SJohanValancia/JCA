@@ -5,6 +5,7 @@ import android.app.admin.DevicePolicyManager
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.os.Bundle  // ✅ AGREGAR ESTE IMPORT
 import android.os.Handler
 import android.os.Looper
 import io.flutter.embedding.android.FlutterActivity
@@ -15,6 +16,33 @@ class MainActivity : FlutterActivity() {
     private val CHANNEL = "com.example.security_app/device_owner"
     private lateinit var devicePolicyManager: DevicePolicyManager
     private lateinit var adminComponent: ComponentName
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        
+        // ✅ VERIFICAR SI HAY SESIÓN ACTIVA Y INICIAR SERVICIO
+        checkAndStartMonitorService()
+    }
+
+    private fun checkAndStartMonitorService() {
+        try {
+            val securePrefs = getSharedPreferences(
+                "flutter.flutter_secure_storage",
+                Context.MODE_PRIVATE
+            )
+            val token = securePrefs.getString("flutter.token", null)
+            
+            if (token != null) {
+                println("✅ Token encontrado - Iniciando servicio de monitoreo")
+                val serviceIntent = Intent(this, LockMonitorService::class.java)
+                startForegroundService(serviceIntent)
+            } else {
+                println("ℹ️ No hay sesión activa")
+            }
+        } catch (e: Exception) {
+            println("❌ Error verificando sesión: ${e.message}")
+        }
+    }
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -63,18 +91,19 @@ class MainActivity : FlutterActivity() {
         }
     }
 
-    private fun lockDevice(message: String): Boolean {
-        return try {
-            if (devicePolicyManager.isDeviceOwnerApp(packageName)) {
-                println("🔒 Iniciando proceso de bloqueo")
-                
-                val prefs = getSharedPreferences("lock_prefs", Context.MODE_PRIVATE)
-                prefs.edit().apply {
-                    putString("lock_message", message)
-                    putBoolean("is_locked", true)
-                    apply()
-                }
-                println("✅ Estado guardado en SharedPreferences")
+ private fun lockDevice(message: String): Boolean {
+    return try {
+        if (devicePolicyManager.isDeviceOwnerApp(packageName)) {
+            println("🔒 Iniciando proceso de bloqueo")
+            
+            val prefs = getSharedPreferences("lock_prefs", Context.MODE_PRIVATE)
+            prefs.edit().apply {
+                putString("lock_message", message)
+                putBoolean("is_locked", true)
+                putLong("lock_activation_time", System.currentTimeMillis())  // ✅ NUEVO: Almacenar timestamp de activación
+                apply()
+            }
+            println("✅ Estado guardado en SharedPreferences")
 
                 try {
                     val serviceIntent = Intent(this, LockMonitorService::class.java)
@@ -84,7 +113,6 @@ class MainActivity : FlutterActivity() {
                     println("❌ Error con servicio: ${e.message}")
                 }
                 
-                // ✅ USAR HANDLER en lugar de Thread.sleep
                 Handler(Looper.getMainLooper()).postDelayed({
                     val intent = Intent(this, LockScreenActivity::class.java)
                     intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)

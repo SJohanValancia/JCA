@@ -78,54 +78,6 @@ Future<void> _login() async {
   if (result['success']) {
     final user = result['user'] as UserModel;
     
-if (user.isVendedor) {
-  print('🔍 Vendedor detectado, verificando bloqueo...');
-  
-  final deviceOwnerService = DeviceOwnerService();
-  final lockStatus = await deviceOwnerService.checkLockStatus();
-  
-  print('📊 Estado de bloqueo: $lockStatus');
-  
-  // ✅ INICIAR SERVICIO DE MONITOREO NATIVO
-  try {
-    const platform = MethodChannel('com.example.security_app/device_owner');
-    await platform.invokeMethod('startMonitorService');
-    print('✅ Servicio de monitoreo iniciado');
-  } catch (e) {
-    print('❌ Error iniciando servicio: $e');
-  }
-  
-  // ✅ INICIAR POLLING FLUTTER
-  LockPollingService().startPolling();
-  
-  if (lockStatus['isLocked'] == true) {
-    print('🔒 DISPOSITIVO BLOQUEADO - Activando bloqueo nativo');
-    
-    final message = lockStatus['lockMessage'] ?? 'Dispositivo bloqueado';
-    final success = await deviceOwnerService.activateNativeLock(message);
-    
-    if (success) {
-      print('✅ Bloqueo nativo activado exitosamente');
-      SystemNavigator.pop();
-      return;
-    } else {
-      print('❌ Error activando bloqueo nativo');
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Dispositivo bloqueado: $message. Error activando bloqueo.'),
-          backgroundColor: Colors.red,
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-      await _authService.logout();
-      return;
-    }
-  } else {
-    print('✅ Dispositivo NO bloqueado, permitiendo acceso');
-  }
-}
-
-    // Solo si no está bloqueado o es dueño
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(result['message']),
@@ -153,7 +105,8 @@ if (user.isVendedor) {
     );
   }
 }
- @override
+
+@override
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: _handleTap,

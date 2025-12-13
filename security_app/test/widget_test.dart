@@ -11,11 +11,14 @@ import 'package:JCA/main.dart';
 
 void main() {
   testWidgets('App loads login screen', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
-    await tester.pumpWidget(const MyApp());
+    // Build our app and trigger a frame with user NOT logged in
+    await tester.pumpWidget(const MyApp(
+      isLoggedIn: false,
+      user: null,
+    ));
 
     // Verify that the login screen is displayed
-    expect(find.text('BIENVENID@ A JCA'), findsOneWidget);
+    expect(find.text('BIENVENIDO A JCA'), findsOneWidget);
     expect(find.text('Inicia sesión para continuar'), findsOneWidget);
     expect(find.text('Usuario'), findsOneWidget);
     expect(find.text('Contraseña'), findsOneWidget);

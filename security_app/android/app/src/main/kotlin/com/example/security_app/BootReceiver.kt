@@ -6,29 +6,32 @@ import android.content.Intent
 import android.os.Build
 
 class BootReceiver : BroadcastReceiver() {
-    override fun onReceive(context: Context, intent: Intent) {
-        if (intent.action == Intent.ACTION_BOOT_COMPLETED) {
-            println("📱 Dispositivo reiniciado - verificando estado")
+override fun onReceive(context: Context, intent: Intent) {
+    if (intent.action == Intent.ACTION_BOOT_COMPLETED) {
+        println("📱 Dispositivo reiniciado - verificando sesión")
+        
+        try {
+            // ✅ VERIFICAR SI HAY TOKEN (SESIÓN ACTIVA)
+            val securePrefs = context.getSharedPreferences(
+                "flutter.flutter_secure_storage",
+                Context.MODE_PRIVATE
+            )
+            val token = securePrefs.getString("flutter.token", null)
             
-            val prefs = context.getSharedPreferences("lock_prefs", Context.MODE_PRIVATE)
-            val isLocked = prefs.getBoolean("is_locked", false)
-
-            if (isLocked) {
-                println("🔒 Dispositivo bloqueado - iniciando servicio")
-                try {
-                    val serviceIntent = Intent(context, LockMonitorService::class.java)
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                        context.startForegroundService(serviceIntent)
-                    } else {
-                        context.startService(serviceIntent)
-                    }
-                    println("✅ Servicio iniciado correctamente")
-                } catch (e: Exception) {
-                    println("❌ Error iniciando servicio en boot: ${e.message}")
+            if (token != null) {
+                println("✅ Sesión activa encontrada - Iniciando servicio")
+                val serviceIntent = Intent(context, LockMonitorService::class.java)
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    context.startForegroundService(serviceIntent)
+                } else {
+                    context.startService(serviceIntent)
                 }
             } else {
-                println("✅ Dispositivo NO bloqueado - no se inicia servicio")
+                println("ℹ️ No hay sesión activa, no se inicia servicio")
             }
+        } catch (e: Exception) {
+            println("❌ Error en boot: ${e.message}")
         }
     }
+}
 }
