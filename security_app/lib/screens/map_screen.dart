@@ -25,9 +25,8 @@ class _MapScreenState extends State<MapScreen> {
   bool _isLoading = true;
   String? _errorMessage;
   bool _isDisposed = false;
-  double _currentZoom = 15;
-  bool _showEmergencyPlaces = true;
   String? _currentAddress;
+  bool _isMapReady = false; // ✅ NUEVO
   
   final _linkService = LinkService();
   final _batteryService = BatteryService();
@@ -55,10 +54,8 @@ class _MapScreenState extends State<MapScreen> {
   void initState() {
     super.initState();
     _mapController = MapController();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _getCurrentLocation();
-      _startLocationUpdates();
-    });
+    // ✅ Cambiar estado inicial para que el mapa se renderice
+    _isLoading = false;
   }
 
   void _startLocationUpdates() {
@@ -89,27 +86,28 @@ class _MapScreenState extends State<MapScreen> {
     );
   }
 
-Future<void> _loadLinkedLocations() async {
-  final locations = await _linkService.getLinkedLocations();
-  
-  if (mounted && !_isDisposed) {
-    setState(() {
-      // ✅ FILTRAR: Solo usuarios bloqueados
-      _linkedLocations = locations.where((user) {
-        return user.isLocked == true; // Solo bloqueados
-      }).toList();
-    });
-    _updateMarkers();
+  Future<void> _loadLinkedLocations() async {
+    final locations = await _linkService.getLinkedLocations();
+    
+    if (mounted && !_isDisposed) {
+      setState(() {
+        // ✅ FILTRAR: Solo usuarios bloqueados
+        _linkedLocations = locations.where((user) {
+          return user.isLocked == true;
+        }).toList();
+      });
+      _updateMarkers();
+    }
   }
-}
 
-Future<void> _getCurrentLocation() async {
+  // ✅ MÉTODO CORREGIDO
+  Future<void> _getCurrentLocation() async {
     if (_isDisposed) return;
     
     try {
+      // ✅ NO cambiar _isLoading aquí para que el mapa siga visible
       if (mounted) {
         setState(() {
-          _isLoading = true;
           _errorMessage = null;
         });
       }
@@ -145,30 +143,32 @@ Future<void> _getCurrentLocation() async {
 
       await _getAddressFromCoordinates(position);
       await _updateMyLocation();
+      await _loadLinkedLocations();
 
-      // ❌ ELIMINAR ESTA LÍNEA - Ya no cargar lugares de emergencia
-      // await _loadEmergencyPlaces(position);
-      
-      await _loadLinkedLocations(); // ✅ Solo cargar vendedores bloqueados
-
-      Future.delayed(const Duration(milliseconds: 300), () {
-        if (!_isDisposed && _mapController != null) {
+      // ✅ Mover cámara solo si el mapa está listo
+      if (_isMapReady && _mapController != null) {
+        await Future.delayed(const Duration(milliseconds: 300));
+        if (!_isDisposed && mounted) {
           _mapController!.move(
             LatLng(position.latitude, position.longitude),
             15,
           );
         }
-      });
+      }
+
+      // ✅ Iniciar actualizaciones automáticas
+      _startLocationUpdates();
 
     } catch (e) {
+      print('❌ Error obteniendo ubicación: $e');
       if (_isDisposed || !mounted) return;
       
       setState(() {
-        _isLoading = false;
         _errorMessage = e.toString();
       });
     }
   }
+  
   Future<void> _getAddressFromCoordinates(Position position) async {
     try {
       final url = Uri.parse(
@@ -288,7 +288,7 @@ Future<void> _getCurrentLocation() async {
     }
 
     if (mounted) {
-      setState(() => _isLoading = false);
+      setState(() {});
     }
   }
 
@@ -1316,18 +1316,16 @@ Future<void> _getCurrentLocation() async {
                       mapController: _mapController,
                       options: MapOptions(
                         initialCenter: _currentPosition != null
-                            ? LatLng(
-                                _currentPosition!.latitude,
-                                _currentPosition!.longitude,
-                              )
-                            : const LatLng(0, 0),
-                        initialZoom: _currentZoom,
-                        onPositionChanged: (position, hasGesture) {
-                          if (hasGesture && position.zoom != null) {
-                            setState(() {
-                              _currentZoom = position.zoom!;
-                            });
-                          }
+                            ? LatLng(_currentPosition!.latitude, _currentPosition!.longitude)
+                            : const LatLng(4.5339, -75.6811),
+                        initialZoom: 13.0,
+                        onMapReady: () {
+                          print('✅ Mapa listo para usar');
+                          setState(() {
+                            _isMapReady = true;
+                          });
+                          // ✅ Ahora sí obtener la ubicación
+                          _getCurrentLocation();
                         },
                       ),
                       children: [
@@ -1345,7 +1343,7 @@ Future<void> _getCurrentLocation() async {
                       right: 20,
                       child: FloatingActionButton(
                         onPressed: () {
-                          if (_currentPosition != null && _mapController != null) {
+                          if (_currentPosition != null && _mapController != null && _isMapReady) {
                             _mapController!.move(
                               LatLng(
                                 _currentPosition!.latitude,

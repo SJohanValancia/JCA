@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'package:flutter/services.dart'; // ✅ AGREGAR ESTA IMPORTACIÓN
+import 'package:flutter/services.dart';
 import '../models/user_model.dart';
 import 'lock_polling_service.dart';
 import 'package:device_info_plus/device_info_plus.dart';
@@ -61,50 +61,73 @@ class AuthService {
     }
   }
 
-Future<Map<String, dynamic>> login({
-  required String usuario,
-  required String password,
-}) async {
-  try {
-    final response = await http.post(
-      Uri.parse('$baseUrl/api/auth/login'),
-      headers: {'Content-Type': 'application/json'},
-      body: jsonEncode({'usuario': usuario, 'password': password}),
-    ).timeout(_timeout);
+  Future<Map<String, dynamic>> login({
+    required String usuario,
+    required String password,
+  }) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/api/auth/login'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'usuario': usuario, 'password': password}),
+      ).timeout(_timeout);
 
-    final data = jsonDecode(response.body);
-
-    if (response.statusCode == 200 && data['success']) {
-      await storage.write(key: 'token', value: data['token']);
+      final data = jsonDecode(response.body);
       
-      final user = UserModel.fromJson(data['usuario']);
-      await storage.write(key: 'user', value: jsonEncode(user.toJson()));
+      // ✅ AGREGAR ESTOS PRINTS:
+      print('═══════════════════════════════════════');
+      print('📦 Response completo: $data');
+      print('───────────────────────────────────────');
+      print('💰 DeudaInfo en response: ${data['usuario']?['deudaInfo']}');
+      print('💵 Deuda Total: ${data['usuario']?['deudaInfo']?['deudaTotal']}');
+      print('💵 Deuda Restante: ${data['usuario']?['deudaInfo']?['deudaRestante']}');
+      print('💳 Cuotas Pagadas: ${data['usuario']?['deudaInfo']?['cuotasPagadas']}');
+      print('💳 Cuotas Pendientes: ${data['usuario']?['deudaInfo']?['cuotasPendientes']}');
+      print('💰 Monto Cuota: ${data['usuario']?['deudaInfo']?['montoCuota']}');
+      print('═══════════════════════════════════════');
 
-      if (user.isVendedor) {
-        print('🔍 Vendedor detectado');
-        await _registrarDispositivo();
+      if (response.statusCode == 200 && data['success']) {
+        await storage.write(key: 'token', value: data['token']);
         
-        // ✅ INICIAR SERVICIO NATIVO INMEDIATAMENTE
-        try {
-          const platform = MethodChannel('com.example.security_app/device_owner');
-          await platform.invokeMethod('startMonitorService');
-          print('✅ Servicio de monitoreo iniciado');
-        } catch (e) {
-          print('❌ Error iniciando servicio: $e');
+        final user = UserModel.fromJson(data['usuario']);
+        
+        // ✅ AGREGAR ESTOS PRINTS TAMBIÉN:
+print('───────────────────────────────────────');
+print('👤 USUARIO CREADO EN FLUTTER:');
+print('   Nombre: ${user.nombre}');
+print('   Rol: ${user.rol}');
+print('   Deuda Total: ${user.deudaInfo?.deudaTotal}');
+print('   Deuda Restante: ${user.deudaInfo?.deudaRestante}');
+print('   Cuotas Pagadas: ${user.deudaInfo?.cuotasPagadas}');
+print('   Cuotas Pendientes: ${user.deudaInfo?.cuotasPendientes}');
+print('   Monto Cuota: ${user.deudaInfo?.montoCuota}');
+print('═══════════════════════════════════════');
+        
+        await storage.write(key: 'user', value: jsonEncode(user.toJson()));
+
+        if (user.isVendedor) {
+          print('🏪 Vendedor detectado');
+          await _registrarDispositivo();
+          
+          try {
+            const platform = MethodChannel('com.example.security_app/device_owner');
+            await platform.invokeMethod('startMonitorService');
+            print('✅ Servicio de monitoreo iniciado');
+          } catch (e) {
+            print('❌ Error iniciando servicio: $e');
+          }
         }
-        
-        // ✅ NO iniciar polling de Flutter, el servicio nativo se encarga
-        // LockPollingService().startPolling(); // ❌ COMENTAR ESTO
-      }
 
-      return {'success': true, 'message': data['message'], 'user': user};
+        return {'success': true, 'message': data['message'], 'user': user};
+      }
+      
+      return {'success': false, 'message': data['message']};
+    } catch (e) {
+      print('❌ Error en login: $e');
+      return {'success': false, 'message': 'Error de conexión'};
     }
-    
-    return {'success': false, 'message': data['message']};
-  } catch (e) {
-    return {'success': false, 'message': 'Error de conexión'};
   }
-}
+
   Future<void> _startMonitorService() async {
     try {
       const platform = MethodChannel('com.example.security_app/device_owner');

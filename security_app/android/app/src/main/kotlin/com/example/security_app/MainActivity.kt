@@ -2,9 +2,11 @@ package com.example.security_app
 
 import android.app.ActivityManager
 import android.app.admin.DevicePolicyManager
+import android.content.BroadcastReceiver  // ✅ AGREGAR
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter  // ✅ AGREGAR
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper

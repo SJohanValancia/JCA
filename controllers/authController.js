@@ -96,7 +96,7 @@ exports.registro = async (req, res) => {
   res.status(500).json({ 
     success: false,
     message: 'Error en el servidor',
-    error: error.message  // ✅ Agregar esto temporalmente
+    error: error.message
   });
 }
 };
@@ -168,6 +168,16 @@ exports.login = async (req, res) => {
     console.log('JC-ID:', usuarioEncontrado.jcId);
     console.log('Rol:', usuarioEncontrado.rol);
     console.log('============================');
+
+    // ✅ AGREGAR ESTOS LOGS:
+    console.log('===== DEUDA INFO COMPLETA =====');
+    console.log('deudaInfo completo:', JSON.stringify(usuarioEncontrado.deudaInfo, null, 2));
+    console.log('deudaTotal:', usuarioEncontrado.deudaInfo?.deudaTotal);
+    console.log('deudaRestante:', usuarioEncontrado.deudaInfo?.deudaRestante);
+    console.log('cuotasPagadas:', usuarioEncontrado.deudaInfo?.cuotasPagadas);
+    console.log('cuotasPendientes:', usuarioEncontrado.deudaInfo?.cuotasPendientes);
+    console.log('montoCuota:', usuarioEncontrado.deudaInfo?.montoCuota);
+    console.log('================================');
 
     res.json({
       success: true,

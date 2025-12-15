@@ -58,5 +58,6 @@ flutter {
 
 dependencies {
     implementation("androidx.cardview:cardview:1.0.0")
-    implementation("com.squareup.okhttp3:okhttp:4.12.0") // ✅ AGREGAR ESTA LÍNEA
+    implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    implementation("com.google.android.gms:play-services-location:21.0.1") // ✅ AGREGAR ESTA LÍNEA
 }
