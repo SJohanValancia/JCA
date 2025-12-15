@@ -15,6 +15,7 @@ import 'qr_display_screen.dart';
 import 'dart:async';
 import 'vendor_home_screen.dart';
 import 'qr_provisioning_screen.dart';
+import '../services/location_tracking_service.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -28,13 +29,13 @@ class _HomeScreenState extends State<HomeScreen> {
   final _deviceService = DeviceService();
   final _permissionService = PermissionService();
   final _linkService = LinkService();
+    final _locationTrackingService = LocationTrackingService();
   UserModel? _currentUser;
   bool _isLoading = true;
   List<LinkRequest> _pendingRequests = [];
   Timer? _requestCheckTimer;
   bool _isDialogOpen = false;
   
-  // ✅ NUEVO: MethodChannel para comunicarse con Kotlin
   static const platform = MethodChannel('com.example.security_app/device_owner');
 
   @override
@@ -43,33 +44,33 @@ class _HomeScreenState extends State<HomeScreen> {
     _initializeApp();
     _startRequestChecker();
   }
+  Future<void> _initializeApp() async {
+    _currentUser = await _authService.getUser();
+    
+    // Redirigir si es vendedor
+    if (_currentUser?.isVendedor == true && mounted) {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (context) => const VendorHomeScreen(),
+        ),
+      );
+      return;
+    }
+    
+    if (mounted) {
+      setState(() => _isLoading = false);
+    }
 
-Future<void> _initializeApp() async {
-  _currentUser = await _authService.getUser();
-  
-  // ✅ Redirigir si es vendedor
-  if (_currentUser?.isVendedor == true && mounted) {
-    Navigator.pushReplacement(
-      context,
-      MaterialPageRoute(
-        builder: (context) => const VendorHomeScreen(),
-      ),
-    );
-    return;
+    _backgroundTasks();
+    _checkPendingRequests();
   }
-  
-  if (mounted) {
-    setState(() => _isLoading = false);
-  }
-
-  _backgroundTasks();
-  _checkPendingRequests();
-}
 
   void _backgroundTasks() {
     _deviceService.saveDeviceToBackend();
     _permissionService.requestPermissions(context);
   }
+
 
   void _startRequestChecker() {
     _requestCheckTimer = Timer.periodic(
@@ -94,81 +95,166 @@ Future<void> _initializeApp() async {
     }
   }
 
-  // ✅ NUEVO: Activar depuración USB
-  Future<void> _enableUSBDebugging() async {
+  void _showLinkRequestDialog(LinkRequest request) {
+    if (_pendingRequests.isEmpty) return;
+    
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (context) => AlertDialog(
+      builder: (dialogContext) => AlertDialog(
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(20),
         ),
-        title: const Row(
+        title: Row(
           children: [
-            Icon(Icons.warning, color: Colors.orange, size: 28),
-            SizedBox(width: 12),
-            Text('Activar Depuración USB'),
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: const Color(0xFF2563EB).withOpacity(0.1),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                Icons.person_add,
+                color: Color(0xFF2563EB),
+                size: 24,
+              ),
+            ),
+            const SizedBox(width: 12),
+            const Expanded(
+              child: Text(
+                'Solicitud de Vinculación',
+                style: TextStyle(fontSize: 18),
+              ),
+            ),
           ],
         ),
-        content: const Text(
-          '¿Estás seguro?\n\n'
-          'Esto habilitará:\n'
-          '• Depuración USB\n'
-          '• Opciones de desarrollador\n'
-          '• Actualizaciones via ADB\n\n'
-          'Solo hazlo si necesitas actualizar la app.',
-          style: TextStyle(fontSize: 15, height: 1.5),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              request.nombre,
+              style: const TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(
+                color: Colors.grey[200],
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text(
+                request.jcId,
+                style: const TextStyle(
+                  fontFamily: 'monospace',
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            const Text(
+              'quiere vincularse contigo para compartir ubicaciones en tiempo real.',
+              style: TextStyle(fontSize: 15),
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              '¿Aceptas?',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancelar'),
-          ),
-          ElevatedButton(
             onPressed: () async {
-              Navigator.pop(context);
+              Navigator.of(dialogContext).pop();
               
-              // Mostrar loading
+              if (!mounted) return;
               showDialog(
                 context: context,
                 barrierDismissible: false,
-                builder: (context) => const Center(
-                  child: CircularProgressIndicator(),
+                builder: (loadingContext) => WillPopScope(
+                  onWillPop: () async => false,
+                  child: const Center(child: CircularProgressIndicator()),
                 ),
               );
               
-              try {
-                final result = await platform.invokeMethod('releaseApp', {
-                  'vendorId': 'manual_unlock',
-                });
+              final success = await _linkService.respondToRequest(request.id, false);
+              
+              if (mounted) {
+                Navigator.of(context, rootNavigator: true).pop();
                 
-                if (mounted) {
-                  Navigator.pop(context); // Cerrar loading
+                if (success) {
+                  setState(() {
+                    _isDialogOpen = false;
+                    _pendingRequests.removeWhere((r) => r.id == request.id);
+                  });
                   
-                  if (result == true) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('✅ Depuración USB habilitada\n'
-                            'Ahora puedes actualizar via ADB'),
-                        backgroundColor: Colors.green,
-                        duration: Duration(seconds: 4),
-                      ),
-                    );
-                  } else {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('❌ Error al habilitar depuración'),
-                        backgroundColor: Colors.red,
-                      ),
-                    );
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('❌ Solicitud rechazada'),
+                      backgroundColor: Colors.orange,
+                    ),
+                  );
+                  
+                  if (_pendingRequests.isNotEmpty) {
+                    await Future.delayed(const Duration(milliseconds: 500));
+                    if (mounted) _showLinkRequestDialog(_pendingRequests.first);
                   }
                 }
-              } catch (e) {
-                if (mounted) {
-                  Navigator.pop(context); // Cerrar loading
+              }
+            },
+            child: const Text(
+              'Rechazar',
+              style: TextStyle(color: Colors.red),
+            ),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              Navigator.of(dialogContext).pop();
+              
+              if (!mounted) return;
+              showDialog(
+                context: context,
+                barrierDismissible: false,
+                builder: (loadingContext) => WillPopScope(
+                  onWillPop: () async => false,
+                  child: const Center(child: CircularProgressIndicator()),
+                ),
+              );
+              
+              final success = await _linkService.respondToRequest(request.id, true);
+              
+              if (mounted) {
+                Navigator.of(context, rootNavigator: true).pop();
+                
+                if (success) {
+                  setState(() {
+                    _isDialogOpen = false;
+                    _pendingRequests.removeWhere((r) => r.id == request.id);
+                  });
+                  
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
-                      content: Text('❌ Error: $e'),
+                      content: Text('✅ ${request.nombre} vinculado exitosamente'),
+                      backgroundColor: Colors.green,
+                      duration: const Duration(seconds: 3),
+                    ),
+                  );
+                  
+                  if (_pendingRequests.isNotEmpty) {
+                    await Future.delayed(const Duration(milliseconds: 500));
+                    if (mounted) _showLinkRequestDialog(_pendingRequests.first);
+                  }
+                } else {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('❌ Error al vincular'),
                       backgroundColor: Colors.red,
                     ),
                   );
@@ -176,202 +262,16 @@ Future<void> _initializeApp() async {
               }
             },
             style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.orange,
+              backgroundColor: const Color(0xFF2563EB),
               foregroundColor: Colors.white,
             ),
-            child: const Text('Activar'),
+            child: const Text('Aceptar'),
           ),
         ],
       ),
     );
   }
-
-void _showLinkRequestDialog(LinkRequest request) {
-  if (_pendingRequests.isEmpty) return;
   
-  showDialog(
-    context: context,
-    barrierDismissible: false,
-    builder: (dialogContext) => AlertDialog(
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(20),
-      ),
-      title: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: const Color(0xFF2563EB).withOpacity(0.1),
-              shape: BoxShape.circle,
-            ),
-            child: const Icon(
-              Icons.person_add,
-              color: Color(0xFF2563EB),
-              size: 24,
-            ),
-          ),
-          const SizedBox(width: 12),
-          const Expanded(
-            child: Text(
-              'Solicitud de Vinculación',
-              style: TextStyle(fontSize: 18),
-            ),
-          ),
-        ],
-      ),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            request.nombre,
-            style: const TextStyle(
-              fontSize: 20,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            decoration: BoxDecoration(
-              color: Colors.grey[200],
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Text(
-              request.jcId,
-              style: const TextStyle(
-                fontFamily: 'monospace',
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-          ),
-          const SizedBox(height: 16),
-          const Text(
-            'quiere vincularse contigo para compartir ubicaciones en tiempo real.',
-            style: TextStyle(fontSize: 15),
-          ),
-          const SizedBox(height: 8),
-          const Text(
-            '¿Aceptas?',
-            style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ],
-      ),
-      actions: [
-        TextButton(
-          onPressed: () async {
-            // ✅ Cerrar diálogo principal primero
-            Navigator.of(dialogContext).pop();
-            
-            // ✅ Mostrar loading en el scaffold context
-            if (!mounted) return;
-            showDialog(
-              context: context,
-              barrierDismissible: false,
-              builder: (loadingContext) => WillPopScope(
-                onWillPop: () async => false,
-                child: const Center(child: CircularProgressIndicator()),
-              ),
-            );
-            
-            final success = await _linkService.respondToRequest(request.id, false);
-            
-            // ✅ Cerrar loading de forma segura
-            if (mounted) {
-              Navigator.of(context, rootNavigator: true).pop();
-              
-              if (success) {
-                setState(() {
-                  _isDialogOpen = false;
-                  _pendingRequests.removeWhere((r) => r.id == request.id);
-                });
-                
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('❌ Solicitud rechazada'),
-                    backgroundColor: Colors.orange,
-                  ),
-                );
-                
-                // Mostrar siguiente solicitud si existe
-                if (_pendingRequests.isNotEmpty) {
-                  await Future.delayed(const Duration(milliseconds: 500));
-                  if (mounted) _showLinkRequestDialog(_pendingRequests.first);
-                }
-              }
-            }
-          },
-          child: const Text(
-            'Rechazar',
-            style: TextStyle(color: Colors.red),
-          ),
-        ),
-        ElevatedButton(
-          onPressed: () async {
-            // ✅ Cerrar diálogo principal primero
-            Navigator.of(dialogContext).pop();
-            
-            // ✅ Mostrar loading en el scaffold context
-            if (!mounted) return;
-            showDialog(
-              context: context,
-              barrierDismissible: false,
-              builder: (loadingContext) => WillPopScope(
-                onWillPop: () async => false,
-                child: const Center(child: CircularProgressIndicator()),
-              ),
-            );
-            
-            final success = await _linkService.respondToRequest(request.id, true);
-            
-            // ✅ Cerrar loading de forma segura
-            if (mounted) {
-              Navigator.of(context, rootNavigator: true).pop();
-              
-              if (success) {
-                setState(() {
-                  _isDialogOpen = false;
-                  _pendingRequests.removeWhere((r) => r.id == request.id);
-                });
-                
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text('✅ ${request.nombre} vinculado exitosamente'),
-                    backgroundColor: Colors.green,
-                    duration: const Duration(seconds: 3),
-                  ),
-                );
-                
-                // Mostrar siguiente solicitud si existe
-                if (_pendingRequests.isNotEmpty) {
-                  await Future.delayed(const Duration(milliseconds: 500));
-                  if (mounted) _showLinkRequestDialog(_pendingRequests.first);
-                }
-              } else {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('❌ Error al vincular'),
-                    backgroundColor: Colors.red,
-                  ),
-                );
-              }
-            }
-          },
-          style: ElevatedButton.styleFrom(
-            backgroundColor: const Color(0xFF2563EB),
-            foregroundColor: Colors.white,
-          ),
-          child: const Text('Aceptar'),
-        ),
-      ],
-    ),
-  );
-}
-  
-  // ✅ NUEVO: Escanear QR para vincular
   Future<void> _scanQRToLink() async {
     final scannedData = await Navigator.push<String>(
       context,
@@ -382,7 +282,6 @@ void _showLinkRequestDialog(LinkRequest request) {
 
     if (scannedData == null || !mounted) return;
 
-    // Validar que sea un JC-ID válido
     if (!scannedData.startsWith('JC')) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -393,7 +292,6 @@ void _showLinkRequestDialog(LinkRequest request) {
       return;
     }
 
-    // Mostrar loading
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -525,121 +423,115 @@ void _showLinkRequestDialog(LinkRequest request) {
     );
   }
 
-Widget _buildHeader() {
-  return Padding(
-    padding: const EdgeInsets.all(24),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Bienvenido!',
-                  style: TextStyle(color: Colors.white70, fontSize: 16),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  _currentUser?.nombre ?? 'Usuario',
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 28,
-                    fontWeight: FontWeight.bold,
+  Widget _buildHeader() {
+    return Padding(
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Bienvenido!',
+                    style: TextStyle(color: Colors.white70, fontSize: 16),
                   ),
-                ),
-              ],
-            ),
-            // ✅ ROW con los 3 botones
-            Row(
-              children: [
-                // ✅ NUEVO: Botón para activar depuración
-                IconButton(
-                  onPressed: _enableUSBDebugging,
-                  icon: const Icon(Icons.developer_mode, color: Colors.orange, size: 28),
-                  tooltip: 'Activar Depuración USB',
-                ),
-                // Botón QR Provisioning
-                IconButton(
-                  onPressed: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => const SimpleQRScreen(),
-                      ),
-                    );
-                  },
-                  icon: const Icon(Icons.qr_code_2, color: Colors.white, size: 28),
-                  tooltip: 'QR Device Owner',
-                ),
-                // Botón Logout
-                IconButton(
-                  onPressed: () async {
-                    await _authService.logout();
-                    if (mounted) {
-                      Navigator.pushReplacement(
+                  const SizedBox(height: 4),
+                  Text(
+                    _currentUser?.nombre ?? 'Usuario',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 28,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
+              ),
+              // ✅ Solo 2 botones ahora
+              Row(
+                children: [
+                  // Botón QR Provisioning
+                  IconButton(
+                    onPressed: () {
+                      Navigator.push(
                         context,
                         MaterialPageRoute(
-                          builder: (context) => const LoginScreen(),
+                          builder: (context) => const SimpleQRScreen(),
                         ),
                       );
-                    }
-                  },
-                  icon: const Icon(Icons.logout, color: Colors.white, size: 28),
-                  tooltip: 'Cerrar sesión',
-                ),
-              ],
-            ),
-          ],
-        ),
-        const SizedBox(height: 12),
-        // ✅ QR en lugar de copiar ID
-        GestureDetector(
-          onTap: () {
-            if (_currentUser?.jcId != null && _currentUser!.jcId.isNotEmpty) {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => QRDisplayScreen(
-                    jcId: _currentUser!.jcId,
-                    nombre: _currentUser!.nombre,
+                    },
+                    icon: const Icon(Icons.qr_code_2, color: Colors.white, size: 28),
+                    tooltip: 'QR Device Owner',
                   ),
-                ),
-              );
-            }
-          },
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-            decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.2),
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Icon(Icons.qr_code, color: Colors.white, size: 20),
-                const SizedBox(width: 8),
-                Text(
-                  'ID: ${_currentUser?.jcId ?? "N/A"}',
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 14,
-                    fontWeight: FontWeight.bold,
-                    fontFamily: 'monospace',
+                  // Botón Logout
+                  IconButton(
+                    onPressed: () async {
+                      await _authService.logout();
+                      if (mounted) {
+                        Navigator.pushReplacement(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => const LoginScreen(),
+                          ),
+                        );
+                      }
+                    },
+                    icon: const Icon(Icons.logout, color: Colors.white, size: 28),
+                    tooltip: 'Cerrar sesión',
                   ),
-                ),
-                const SizedBox(width: 8),
-                const Icon(Icons.touch_app, color: Colors.white70, size: 16),
-              ],
+                ],
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          // QR en lugar de copiar ID
+          GestureDetector(
+            onTap: () {
+              if (_currentUser?.jcId != null && _currentUser!.jcId.isNotEmpty) {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => QRDisplayScreen(
+                      jcId: _currentUser!.jcId,
+                      nombre: _currentUser!.nombre,
+                    ),
+                  ),
+                );
+              }
+            },
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.2),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.qr_code, color: Colors.white, size: 20),
+                  const SizedBox(width: 8),
+                  Text(
+                    'ID: ${_currentUser?.jcId ?? "N/A"}',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 14,
+                      fontWeight: FontWeight.bold,
+                      fontFamily: 'monospace',
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  const Icon(Icons.touch_app, color: Colors.white70, size: 16),
+                ],
+              ),
             ),
           ),
-        ),
-      ],
-    ),
-  );
-}
+        ],
+      ),
+    );
+  }
 
   Widget _buildMainReportButton() {
     return InkWell(

@@ -1,5 +1,6 @@
 package com.example.security_app
 
+import android.app.ActivityManager
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -38,19 +39,19 @@ class LockMonitorService : Service() {
         var isRunning = false 
     }
 
-override fun onCreate() {
-    super.onCreate()
-    isRunning = true // ✅ NUEVO
-    println("🔧 [SERVICE] LockMonitorService onCreate - INICIANDO")
-    
-    createNotificationChannel()
-    startForeground(NOTIFICATION_ID, createNotification())
-    
-    registerScreenReceiver()
-    startBackendMonitoring()
-    
-    println("✅ [SERVICE] LockMonitorService COMPLETAMENTE OPERACIONAL")
-}
+    override fun onCreate() {
+        super.onCreate()
+        isRunning = true
+        println("🔧 [SERVICE] LockMonitorService onCreate - INICIANDO")
+        
+        createNotificationChannel()
+        startForeground(NOTIFICATION_ID, createNotification())
+        
+        registerScreenReceiver()
+        startBackendMonitoring()
+        
+        println("✅ [SERVICE] LockMonitorService COMPLETAMENTE OPERACIONAL")
+    }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         println("▶️ [SERVICE] onStartCommand")
@@ -185,62 +186,119 @@ override fun onCreate() {
         }
     }
 
-    private fun lockDeviceNow(message: String) {
-        try {
-            val prefs = getSharedPreferences("lock_prefs", Context.MODE_PRIVATE)
-            prefs.edit().apply {
-                putString("lock_message", message)
-                putBoolean("is_locked", true)
-                putLong("lock_activation_time", System.currentTimeMillis())
-                apply()
-            }
+private fun lockDeviceNow(message: String) {
+    try {
+        val prefs = getSharedPreferences("lock_prefs", Context.MODE_PRIVATE)
+        prefs.edit().apply {
+            putString("lock_message", message)
+            putBoolean("is_locked", true)
+            putBoolean("tracking_active", true) // ✅ NUEVO
+            putLong("lock_activation_time", System.currentTimeMillis())
+            apply()
+        }
 
-            val intent = Intent(this, LockScreenActivity::class.java)
-            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
-            startActivity(intent)
-            
-            println("✅ [SERVICE] Pantalla de bloqueo lanzada")
+        // ✅ NUEVO: Iniciar servicio de ubicación
+        try {
+            val locationIntent = Intent(this, LocationTrackingService::class.java)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                startForegroundService(locationIntent)
+            } else {
+                startService(locationIntent)
+            }
+            println("✅ [SERVICE] Servicio de ubicación iniciado")
         } catch (e: Exception) {
-            println("❌ [SERVICE] Error bloqueando: ${e.message}")
+            println("❌ [SERVICE] Error iniciando ubicación: ${e.message}")
+        }
+
+        val intent = Intent(this, LockScreenActivity::class.java)
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
+        startActivity(intent)
+        
+        println("✅ [SERVICE] Pantalla de bloqueo lanzada")
+    } catch (e: Exception) {
+        println("❌ [SERVICE] Error bloqueando: ${e.message}")
+    }
+}
+
+    // ✅ Iniciar seguimiento de ubicación
+    private fun startLocationTracking() {
+        try {
+            val locationIntent = Intent("com.example.security_app.START_LOCATION_TRACKING")
+            sendBroadcast(locationIntent)
+            println("✅ [SERVICE] Solicitud de ubicación enviada")
+        } catch (e: Exception) {
+            println("❌ [SERVICE] Error enviando solicitud de ubicación: ${e.message}")
         }
     }
 
     private fun unlockDeviceNow() {
         try {
             val prefs = getSharedPreferences("lock_prefs", Context.MODE_PRIVATE)
-            prefs.edit().putBoolean("is_locked", false).apply()
+            prefs.edit().apply {
+                putBoolean("is_locked", false)
+                putBoolean("is_adb_alert", false) // ✅ Limpiar alerta ADB también
+                apply()
+            }
+            println("✅ [SERVICE] SharedPreferences actualizado")
 
-            val unlockIntent = Intent("com.example.security_app.UNLOCK_DEVICE")
-            sendBroadcast(unlockIntent)
+            // ✅ Enviar broadcast múltiples veces para asegurar que llegue
+            repeat(3) { attempt ->
+                try {
+                    val unlockIntent = Intent("com.example.security_app.UNLOCK_DEVICE")
+                    sendBroadcast(unlockIntent)
+                    println("📡 [SERVICE] Broadcast enviado (intento ${attempt + 1})")
+                    Thread.sleep(200) // Esperar 200ms entre intentos
+                } catch (e: Exception) {
+                    println("⚠️ [SERVICE] Error enviando broadcast: ${e.message}")
+                }
+            }
             
-            println("✅ [SERVICE] Comando de desbloqueo enviado")
+            // ✅ Forzar cierre de LockScreenActivity si existe
+            try {
+                val activityManager = getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
+                val tasks = activityManager.appTasks
+                
+                for (task in tasks) {
+                    val taskInfo = task.taskInfo
+                    val className = taskInfo.baseActivity?.className
+                    
+                    if (className?.contains("LockScreenActivity") == true) {
+                        println("🗑️ [SERVICE] Cerrando LockScreenActivity forzadamente")
+                        task.finishAndRemoveTask()
+                    }
+                }
+            } catch (e: Exception) {
+                println("⚠️ [SERVICE] Error cerrando activity: ${e.message}")
+            }
+            
+            println("✅ [SERVICE] Comando de desbloqueo completado")
         } catch (e: Exception) {
             println("❌ [SERVICE] Error desbloqueando: ${e.message}")
         }
     }
 
-override fun onDestroy() {
-    super.onDestroy()
-    isRunning = false // ✅ NUEVO
-    println("💀 [SERVICE] onDestroy")
-    
-    try {
-        handler.removeCallbacksAndMessages(null)
-    } catch (e: Exception) {
-        println("⚠️ [SERVICE] Error deteniendo handler: ${e.message}")
-    }
-    
-    if (isReceiverRegistered) {
+    override fun onDestroy() {
+        super.onDestroy()
+        isRunning = false
+        println("💀 [SERVICE] onDestroy")
+        
         try {
-            unregisterReceiver(screenReceiver)
+            handler.removeCallbacksAndMessages(null)
         } catch (e: Exception) {
-            println("⚠️ [SERVICE] Error desregistrando receiver: ${e.message}")
+            println("⚠️ [SERVICE] Error deteniendo handler: ${e.message}")
         }
+        
+        if (isReceiverRegistered) {
+            try {
+                unregisterReceiver(screenReceiver)
+            } catch (e: Exception) {
+                println("⚠️ [SERVICE] Error desregistrando receiver: ${e.message}")
+            }
+        }
+        
+        // ✅ Reiniciar el servicio automáticamente
+        println("🔄 [SERVICE] Intentando reiniciar servicio...")
+        val restartIntent = Intent(applicationContext, LockMonitorService::class.java)
+        startService(restartIntent)
     }
-    
-    // ✅ NUEVO: Reiniciar el servicio automáticamente
-    println("🔄 [SERVICE] Intentando reiniciar servicio...")
-    val restartIntent = Intent(applicationContext, LockMonitorService::class.java)
-    startService(restartIntent)
-}
 }

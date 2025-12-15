@@ -244,6 +244,7 @@ exports.updateLocation = async (req, res) => {
 };
 
 // Obtener ubicaciones de dispositivos vinculados
+// Obtener ubicaciones de dispositivos vinculados
 exports.getLinkedLocations = async (req, res) => {
   try {
     const userId = req.user.id;
@@ -256,10 +257,10 @@ exports.getLinkedLocations = async (req, res) => {
 
     const linkedUserIds = links.map(link => link.linkedUserId);
 
-    // Obtener ubicaciones
+    // Obtener ubicaciones y poblar con isLocked
     const locations = await Location.find({
       userId: { $in: linkedUserIds }
-    }).populate('userId', 'nombre usuario jcId');
+    }).populate('userId', 'nombre usuario jcId rol isLocked'); // ✅ Agregar isLocked
 
     res.json({
       success: true,

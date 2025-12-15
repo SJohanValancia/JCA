@@ -89,18 +89,21 @@ class _MapScreenState extends State<MapScreen> {
     );
   }
 
-  Future<void> _loadLinkedLocations() async {
-    final locations = await _linkService.getLinkedLocations();
-    
-    if (mounted && !_isDisposed) {
-      setState(() {
-        _linkedLocations = locations;
-      });
-      _updateMarkers();
-    }
+Future<void> _loadLinkedLocations() async {
+  final locations = await _linkService.getLinkedLocations();
+  
+  if (mounted && !_isDisposed) {
+    setState(() {
+      // ✅ FILTRAR: Solo usuarios bloqueados
+      _linkedLocations = locations.where((user) {
+        return user.isLocked == true; // Solo bloqueados
+      }).toList();
+    });
+    _updateMarkers();
   }
+}
 
-  Future<void> _getCurrentLocation() async {
+Future<void> _getCurrentLocation() async {
     if (_isDisposed) return;
     
     try {
@@ -143,11 +146,10 @@ class _MapScreenState extends State<MapScreen> {
       await _getAddressFromCoordinates(position);
       await _updateMyLocation();
 
-      if (_showEmergencyPlaces) {
-        await _loadEmergencyPlaces(position);
-      }
+      // ❌ ELIMINAR ESTA LÍNEA - Ya no cargar lugares de emergencia
+      // await _loadEmergencyPlaces(position);
       
-      await _loadLinkedLocations();
+      await _loadLinkedLocations(); // ✅ Solo cargar vendedores bloqueados
 
       Future.delayed(const Duration(milliseconds: 300), () {
         if (!_isDisposed && _mapController != null) {
@@ -167,7 +169,6 @@ class _MapScreenState extends State<MapScreen> {
       });
     }
   }
-
   Future<void> _getAddressFromCoordinates(Position position) async {
     try {
       final url = Uri.parse(

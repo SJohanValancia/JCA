@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'dart:async';
 import '../models/user_model.dart';
@@ -6,8 +7,10 @@ import '../models/linked_user_model.dart';
 import '../services/auth_service.dart';
 import '../services/link_service.dart';
 import '../services/lock_polling_service.dart';
+import '../services/location_tracking_service.dart';
 import 'login_screen.dart';
 import 'qr_display_screen.dart';
+import 'vendor_lock_screen.dart';
 
 class VendorHomeScreen extends StatefulWidget {
   const VendorHomeScreen({super.key});
@@ -17,6 +20,9 @@ class VendorHomeScreen extends StatefulWidget {
 }
 
 class _VendorHomeScreenState extends State<VendorHomeScreen> {
+  final _locationTrackingService = LocationTrackingService();
+  static const platform = MethodChannel('com.example.security_app/device_owner');
+
   final _authService = AuthService();
   final _linkService = LinkService();
   UserModel? _currentUser;
@@ -30,10 +36,43 @@ class _VendorHomeScreenState extends State<VendorHomeScreen> {
   void initState() {
     super.initState();
     _loadUserData();
+    _setupMethodChannel();
     _startRequestChecker();
+    _checkIfLocked();
     
     // ✅ INICIAR POLLING CONTINUO
     LockPollingService().startPolling();
+  }
+
+  // ✅ Configurar canal para recibir eventos de Kotlin
+  void _setupMethodChannel() {
+    platform.setMethodCallHandler((call) async {
+      if (call.method == 'activateLocationTracking') {
+        print('📍 Activando tracking desde Kotlin');
+        await _locationTrackingService.startTracking();
+      }
+    });
+  }
+
+  Future<void> _checkIfLocked() async {
+    try {
+      final isLocked = await platform.invokeMethod('isLocked');
+      if (isLocked == true) {
+        // ✅ Si está bloqueado, iniciar tracking inmediatamente
+        await _locationTrackingService.startTracking();
+        // Mostrar pantalla de bloqueo
+        if (mounted) {
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(
+              builder: (context) => const VendorLockScreen(),
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      print('Error verificando estado de bloqueo: $e');
+    }
   }
 
   @override

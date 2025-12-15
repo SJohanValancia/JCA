@@ -16,8 +16,9 @@ router.post('/unlink', linkController.unlinkDevice);
 // Ubicaciones
 router.post('/location/update', linkController.updateLocation);
 router.get('/location/linked', linkController.getLinkedLocations);
+router.get('/location/blocked-vendors', linkController.getBlockedVendorsLocations); // ✅ NUEVO
 
-// ✅ NUEVAS rutas para configuración de deuda
+// Configuración de deuda
 router.post('/debt/configure', linkController.configureDebt);
 router.get('/debt/:linkedUserId', linkController.getDebtConfig);
 router.post('/debt/payment', linkController.registerPayment);

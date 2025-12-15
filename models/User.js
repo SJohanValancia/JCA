@@ -42,6 +42,12 @@ const userSchema = new mongoose.Schema({
     default: 'dueno',
     required: true
   },
+
+    isLocked: { // ✅ NUEVO
+    type: Boolean,
+    default: false
+  },
+
   deviceId: {
   type: String,
   default: null,

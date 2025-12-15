@@ -3,7 +3,7 @@ class LinkedUserModel {
   final String nombre;
   final String usuario;
   final String jcId;
-  final String? rol; // ✅ NUEVO
+  final String? rol;
   final double? latitude;
   final double? longitude;
   final String? address;
@@ -11,13 +11,14 @@ class LinkedUserModel {
   final bool? isCharging;
   final double? accuracy;
   final DateTime? timestamp;
+  final bool? isLocked; // ✅ AGREGADO
 
   LinkedUserModel({
     required this.id,
     required this.nombre,
     required this.usuario,
     required this.jcId,
-    this.rol, // ✅ NUEVO
+    this.rol,
     this.latitude,
     this.longitude,
     this.address,
@@ -25,6 +26,7 @@ class LinkedUserModel {
     this.isCharging,
     this.accuracy,
     this.timestamp,
+    this.isLocked, // ✅ AGREGADO
   });
 
   factory LinkedUserModel.fromJson(Map<String, dynamic> json) {
@@ -33,7 +35,7 @@ class LinkedUserModel {
       nombre: json['userId']?['nombre'] ?? json['nombre'] ?? '',
       usuario: json['userId']?['usuario'] ?? json['usuario'] ?? '',
       jcId: json['userId']?['jcId'] ?? json['jcId'] ?? '',
-      rol: json['userId']?['rol'] ?? json['rol'], // ✅ NUEVO
+      rol: json['userId']?['rol'] ?? json['rol'],
       latitude: json['latitude']?.toDouble(),
       longitude: json['longitude']?.toDouble(),
       address: json['address'],
@@ -43,10 +45,11 @@ class LinkedUserModel {
       timestamp: json['timestamp'] != null 
           ? DateTime.parse(json['timestamp']) 
           : null,
+      isLocked: json['userId']?['isLocked'] ?? json['isLocked'] ?? false, // ✅ AGREGADO
     );
   }
-  
-  // ✅ NUEVO: Helper para verificar si es vendedor
+
+  // Helper para verificar si es vendedor
   bool get isVendedor => rol == 'vendedor';
 }
 

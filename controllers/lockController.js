@@ -43,7 +43,12 @@ exports.lockDevice = async (req, res) => {
       });
     }
 
-    // Crear o actualizar bloqueo
+    // ✅ NUEVO: Actualizar isLocked en User
+    vendedor.isLocked = true;
+    await vendedor.save();
+    console.log('✅ Usuario marcado como bloqueado en BD');
+
+    // Crear o actualizar bloqueo en DeviceLock
     let deviceLock = await DeviceLock.findOne({
       duenoId,
       vendedorId
@@ -95,6 +100,14 @@ exports.unlockDevice = async (req, res) => {
 
     console.log('🔓 Desbloqueando dispositivo:', { duenoId, vendedorId });
 
+    // ✅ NUEVO: Actualizar isLocked en User
+    const vendedor = await User.findById(vendedorId);
+    if (vendedor) {
+      vendedor.isLocked = false;
+      await vendedor.save();
+      console.log('✅ Usuario marcado como desbloqueado en BD');
+    }
+
     const deviceLock = await DeviceLock.findOne({
       duenoId,
       vendedorId
@@ -127,16 +140,13 @@ exports.unlockDevice = async (req, res) => {
   }
 };
 
-
-// En lockController.js:
-
+// Verificar estado de bloqueo (para el vendedor)
 exports.checkLockStatus = async (req, res) => {
   try {
     const userId = req.user.id;
     
     console.log('🔍 Verificando bloqueo para userId:', userId);
     
-    // Buscar al usuario
     const user = await User.findById(userId);
     
     if (!user) {
@@ -147,7 +157,7 @@ exports.checkLockStatus = async (req, res) => {
       });
     }
 
-    console.log('👤 Usuario encontrado - Rol:', user.rol);
+    console.log('👤 Usuario encontrado - Rol:', user.rol, '- isLocked:', user.isLocked);
 
     // Si es dueño, nunca está bloqueado
     if (user.rol === 'dueno') {
@@ -158,18 +168,21 @@ exports.checkLockStatus = async (req, res) => {
       });
     }
 
-    // Si es vendedor, buscar bloqueo activo en DeviceLock
+    // Si es vendedor, verificar isLocked del usuario
+    const isLocked = user.isLocked || false;
+
+    // También buscar en DeviceLock por seguridad
     const lockStatus = await DeviceLock.findOne({
       vendedorId: userId,
       isLocked: true
     });
 
-    console.log('🔒 Estado de bloqueo encontrado:', lockStatus ? 'SÍ BLOQUEADO' : 'NO BLOQUEADO');
+    console.log('🔒 Estado de bloqueo:', isLocked ? 'SÍ BLOQUEADO' : 'NO BLOQUEADO');
 
     res.json({
       success: true,
-      isLocked: lockStatus ? true : false,
-      lockMessage: lockStatus?.lockMessage || null,
+      isLocked: isLocked || (lockStatus ? true : false),
+      lockMessage: lockStatus?.lockMessage || 'Dispositivo bloqueado',
       lockedAt: lockStatus?.lockedAt || null
     });
 
@@ -189,24 +202,28 @@ exports.getLockStatus = async (req, res) => {
     const duenoId = req.user.id;
     const { vendedorId } = req.params;
 
-    const deviceLock = await DeviceLock.findOne({
-      duenoId,
-      vendedorId
-    });
-
-    if (!deviceLock) {
+    // ✅ Verificar directamente en User
+    const vendedor = await User.findById(vendedorId);
+    
+    if (!vendedor) {
       return res.json({
         success: true,
         isLocked: false
       });
     }
 
+    // Buscar también en DeviceLock
+    const deviceLock = await DeviceLock.findOne({
+      duenoId,
+      vendedorId
+    });
+
     res.json({
       success: true,
-      isLocked: deviceLock.isLocked,
-      lockMessage: deviceLock.lockMessage,
-      lockedAt: deviceLock.lockedAt,
-      unlockedAt: deviceLock.unlockedAt
+      isLocked: vendedor.isLocked || (deviceLock?.isLocked || false),
+      lockMessage: deviceLock?.lockMessage || 'Dispositivo bloqueado',
+      lockedAt: deviceLock?.lockedAt,
+      unlockedAt: deviceLock?.unlockedAt
     });
 
   } catch (error) {

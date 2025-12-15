@@ -41,16 +41,22 @@ class LockScreenActivity : Activity() {
 
     // ✅ NUEVO: Referencia al TextView de estado
     private lateinit var lockStatus: TextView
-
 override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
     
     println("🔒 ========== LockScreenActivity onCreate ==========")
     
     setupFullscreen()
-    
-    // ✅ NUEVO: Verificar y reiniciar servicio si es necesario
     ensureServiceIsRunning()
+    
+    // ✅ NUEVO: Asegurar que el servicio de ubicación esté corriendo
+    try {
+        val locationIntent = Intent(this, LocationTrackingService::class.java)
+        startForegroundService(locationIntent)
+        println("✅ [LOCK] Servicio de ubicación verificado/iniciado")
+    } catch (e: Exception) {
+        println("❌ [LOCK] Error con servicio de ubicación: ${e.message}")
+    }
     
     setContentView(R.layout.activity_lock_screen)
         
@@ -177,59 +183,66 @@ override fun onCreate(savedInstanceState: Bundle?) {
         handler.post(backendCheckRunnable)
     }
 
-    private fun checkBackendStatus() {
-        Thread {
-            try {
-                val securePrefs = getSharedPreferences(
-                    "flutter.flutter_secure_storage",
-                    Context.MODE_PRIVATE
-                )
-                val token = securePrefs.getString("flutter.token", null)
+private fun checkBackendStatus() {
+    Thread {
+        try {
+            // ✅ VERIFICAR si es alerta ADB
+            val prefs = getSharedPreferences("lock_prefs", Context.MODE_PRIVATE)
+            val isAdbAlert = prefs.getBoolean("is_adb_alert", false)
+            
+            if (isAdbAlert) {
+                println("🚨 [LOCK] Alerta ADB activa - No consultar backend")
+                return@Thread
+            }
+            
+            val securePrefs = getSharedPreferences(
+                "flutter.flutter_secure_storage",
+                Context.MODE_PRIVATE
+            )
+            val token = securePrefs.getString("flutter.token", null)
 
-                if (token == null) {
-                    println("⚠️ [LOCKSCREEN] Token no encontrado")
-                    return@Thread
-                }
+            if (token == null) {
+                println("⚠️ [LOCKSCREEN] Token no encontrado")
+                return@Thread
+            }
 
-                println("🔑 [LOCKSCREEN] Token encontrado, consultando...")
+            println("🔑 [LOCKSCREEN] Token encontrado, consultando...")
 
-                val request = Request.Builder()
-                    .url("$baseUrl/api/lock/check")
-                    .addHeader("Authorization", "Bearer $token")
-                    .build()
+            val request = Request.Builder()
+                .url("$baseUrl/api/lock/check")
+                .addHeader("Authorization", "Bearer $token")
+                .build()
 
-                val response = client.newCall(request).execute()
+            val response = client.newCall(request).execute()
 
-                println("📡 [LOCKSCREEN] Status: ${response.code}")
+            println("📡 [LOCKSCREEN] Status: ${response.code}")
 
-                if (response.isSuccessful) {
-                    val body = response.body?.string() ?: ""
-                    println("📦 [LOCKSCREEN] Response: $body")
+            if (response.isSuccessful) {
+                val body = response.body?.string() ?: ""
+                println("📦 [LOCKSCREEN] Response: $body")
+                
+                val json = JSONObject(body)
+                val isLocked = json.getBoolean("isLocked")
+
+                if (!isLocked) {
+                    println("🔓 [LOCKSCREEN] Backend indica desbloqueo - procediendo...")
                     
-                    val json = JSONObject(body)
-                    val isLocked = json.getBoolean("isLocked")
-
-                    if (!isLocked) {
-                        println("🔓 [LOCKSCREEN] Backend indica desbloqueo - procediendo...")
+                    runOnUiThread {
+                        val localPrefs = getSharedPreferences("lock_prefs", Context.MODE_PRIVATE)
+                        localPrefs.edit().putBoolean("is_locked", false).apply()
+                        println("✅ [LOCKSCREEN] SharedPreferences actualizado")
                         
-                        // ✅ Actualizar SharedPreferences
-                        runOnUiThread {
-                            val prefs = getSharedPreferences("lock_prefs", Context.MODE_PRIVATE)
-                            prefs.edit().putBoolean("is_locked", false).apply()
-                            println("✅ [LOCKSCREEN] SharedPreferences actualizado")
-                            
-                            // ✅ Cerrar pantalla de bloqueo
-                            finishUnlock()
-                        }
+                        finishUnlock()
                     }
                 }
-
-            } catch (e: Exception) {
-                println("❌ [LOCKSCREEN] Error consultando backend: ${e.message}")
-                e.printStackTrace()
             }
-        }.start()
-    }
+
+        } catch (e: Exception) {
+            println("❌ [LOCKSCREEN] Error consultando backend: ${e.message}")
+            e.printStackTrace()
+        }
+    }.start()
+}
 
     private fun registerUnlockReceiver() {
         try {

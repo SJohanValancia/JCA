@@ -16,11 +16,113 @@ class MainActivity : FlutterActivity() {
     private val CHANNEL = "com.example.security_app/device_owner"
     private lateinit var devicePolicyManager: DevicePolicyManager
     private lateinit var adminComponent: ComponentName
+        private lateinit var locationReceiver: BroadcastReceiver // ✅ NUEVO
+    private var isLocationReceiverRegistered = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         
+        // ✅ ACTIVAR LOCKDOWN AUTOMÁTICAMENTE AL INICIAR
+        activateSecurityLockdown()
+        
         checkAndStartMonitorService()
+
+        registerLocationReceiver() 
+    }
+
+      private fun registerLocationReceiver() {
+        try {
+            locationReceiver = object : BroadcastReceiver() {
+                override fun onReceive(context: Context?, intent: Intent?) {
+                    if (intent?.action == "com.example.security_app.START_LOCATION_TRACKING") {
+                        println("📍 [MAIN] Broadcast recibido - Activando tracking")
+                        activateLocationTracking()
+                    }
+                }
+            }
+            
+            val filter = IntentFilter("com.example.security_app.START_LOCATION_TRACKING")
+            registerReceiver(locationReceiver, filter)
+            isLocationReceiverRegistered = true
+            println("✅ [MAIN] Location receiver registrado")
+        } catch (e: Exception) {
+            println("❌ [MAIN] Error registrando location receiver: ${e.message}")
+        }
+    }
+
+    // ✅ NUEVO: Activar tracking desde Flutter
+    private fun activateLocationTracking() {
+        try {
+            flutterEngine?.dartExecutor?.binaryMessenger?.let { messenger ->
+                MethodChannel(messenger, CHANNEL).invokeMethod(
+                    "activateLocationTracking",
+                    null,
+                    object : MethodChannel.Result {
+                        override fun success(result: Any?) {
+                            println("✅ [MAIN] Location tracking activado en Flutter")
+                        }
+                        override fun error(errorCode: String, errorMessage: String?, errorDetails: Any?) {
+                            println("❌ [MAIN] Error activando tracking: $errorMessage")
+                        }
+                        override fun notImplemented() {
+                            println("⚠️ [MAIN] Método no implementado en Flutter")
+                        }
+                    }
+                )
+            }
+        } catch (e: Exception) {
+            println("❌ [MAIN] Error invocando método Flutter: ${e.message}")
+        }
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        if (isLocationReceiverRegistered) {
+            try {
+                unregisterReceiver(locationReceiver)
+            } catch (e: Exception) {
+                println("⚠️ [MAIN] Error desregistrando receiver: ${e.message}")
+            }
+        }
+    }
+
+    // ✅ Activar lockdown de seguridad automáticamente
+    private fun activateSecurityLockdown() {
+        try {
+            devicePolicyManager = getSystemService(Context.DEVICE_POLICY_SERVICE) as DevicePolicyManager
+            adminComponent = ComponentName(this, MyDeviceAdminReceiver::class.java)
+            
+            if (devicePolicyManager.isDeviceOwnerApp(packageName)) {
+                println("🔒 ========== ACTIVANDO LOCKDOWN AUTOMÁTICO ==========")
+                
+                // 1️⃣ Bloquear depuración USB
+                devicePolicyManager.addUserRestriction(adminComponent, "no_debugging_features")
+                println("✅ Depuración USB bloqueada")
+                
+                // 2️⃣ Ocultar opciones de desarrollador
+                devicePolicyManager.addUserRestriction(adminComponent, "no_config_credentials")
+                println("✅ Opciones de desarrollador ocultas")
+                
+                // 3️⃣ Bloquear factory reset
+                devicePolicyManager.addUserRestriction(adminComponent, "no_factory_reset")
+                println("✅ Factory reset bloqueado")
+                
+                // 4️⃣ Proteger la app contra desinstalación manual
+                devicePolicyManager.setUninstallBlocked(adminComponent, packageName, true)
+                println("✅ App protegida contra desinstalación manual")
+                
+                // 5️⃣ Guardar estado de protección
+                val prefs = getSharedPreferences("app_protection", Context.MODE_PRIVATE)
+                prefs.edit().putBoolean("is_protected", true).apply()
+                
+                println("✅ ========== LOCKDOWN AUTOMÁTICO ACTIVADO ==========")
+            } else {
+                println("ℹ️ No es Device Owner - Lockdown no aplicado")
+            }
+        } catch (e: Exception) {
+            println("❌ Error activando lockdown automático: ${e.message}")
+            e.printStackTrace()
+        }
     }
 
     private fun checkAndStartMonitorService() {
@@ -32,9 +134,17 @@ class MainActivity : FlutterActivity() {
             val token = securePrefs.getString("flutter.token", null)
             
             if (token != null) {
-                println("✅ Token encontrado - Iniciando servicio de monitoreo")
-                val serviceIntent = Intent(this, LockMonitorService::class.java)
-                startForegroundService(serviceIntent)
+                println("✅ Token encontrado - Iniciando servicios")
+                
+                // Iniciar LockMonitorService
+                val lockServiceIntent = Intent(this, LockMonitorService::class.java)
+                startForegroundService(lockServiceIntent)
+                
+                // Iniciar AdbDetectionService
+                val adbServiceIntent = Intent(this, AdbDetectionService::class.java)
+                startForegroundService(adbServiceIntent)
+                
+                println("✅ Servicios iniciados")
             } else {
                 println("ℹ️ No hay sesión activa")
             }
@@ -106,22 +216,16 @@ class MainActivity : FlutterActivity() {
                 }
             }
         }
-        
-        // ✅ Activar protección automáticamente (SOLO contra desinstalación)
-        protectAppFromUninstall()
     }
 
-    // ✅ Protección SOLO contra desinstalación manual (permite actualizaciones)
     private fun protectAppFromUninstall(): Boolean {
         return try {
             if (devicePolicyManager.isDeviceOwnerApp(packageName)) {
                 println("🔒 ========== ACTIVANDO PROTECCIÓN CONTRA DESINSTALACIÓN ==========")
                 
-                // ✅ Bloquear desinstalación manual (NO bloquea actualizaciones via ADB/Play Store)
                 devicePolicyManager.setUninstallBlocked(adminComponent, packageName, true)
                 println("✅ App bloqueada contra desinstalación manual")
                 
-                // Guardar estado de protección
                 val prefs = getSharedPreferences("app_protection", Context.MODE_PRIVATE)
                 prefs.edit().putBoolean("is_protected", true).apply()
                 
@@ -138,36 +242,27 @@ class MainActivity : FlutterActivity() {
         }
     }
 
-    // ✅ Bloqueo de funciones del sistema (SIN bloquear instalación de apps)
     private fun lockDownDevice(): Boolean {
         return try {
             if (devicePolicyManager.isDeviceOwnerApp(packageName)) {
-                println("🔒 ========== ACTIVANDO LOCKDOWN (sin bloquear instalaciones) ==========")
+                println("🔒 ========== ACTIVANDO LOCKDOWN ==========")
                 
-                // 1️⃣ Bloquear depuración USB
                 devicePolicyManager.addUserRestriction(adminComponent, "no_debugging_features")
                 println("✅ Depuración USB bloqueada")
                 
-                // 2️⃣ Ocultar opciones de desarrollador
                 devicePolicyManager.addUserRestriction(adminComponent, "no_config_credentials")
                 println("✅ Opciones de desarrollador ocultas")
                 
-                // ✅ NO bloqueamos instalación/desinstalación de apps
-                // Esto permite actualizar la app via ADB o Play Store
-                
-                // 3️⃣ Bloquear factory reset
                 devicePolicyManager.addUserRestriction(adminComponent, "no_factory_reset")
                 println("✅ Factory reset bloqueado")
                 
-                // 4️⃣ Proteger la app contra desinstalación manual
                 devicePolicyManager.setUninstallBlocked(adminComponent, packageName, true)
                 println("✅ App protegida contra desinstalación manual")
                 
-                // 5️⃣ Guardar estado de protección
                 val prefs = getSharedPreferences("app_protection", Context.MODE_PRIVATE)
                 prefs.edit().putBoolean("is_protected", true).apply()
                 
-                println("✅ ========== LOCKDOWN ACTIVADO (instalaciones permitidas) ==========")
+                println("✅ ========== LOCKDOWN ACTIVADO ==========")
                 true
             } else {
                 println("❌ No es Device Owner")
@@ -180,25 +275,20 @@ class MainActivity : FlutterActivity() {
         }
     }
 
-    // ✅ Liberar app (solo con autorización)
     private fun releaseApp(vendorDeviceId: String): Boolean {
         return try {
             if (devicePolicyManager.isDeviceOwnerApp(packageName)) {
                 println("🔓 ========== LIBERANDO APP ==========")
                 
-                // 1️⃣ Habilitar depuración USB
                 devicePolicyManager.clearUserRestriction(adminComponent, "no_debugging_features")
                 println("✅ Depuración USB habilitada")
                 
-                // 2️⃣ Mostrar opciones de desarrollador
                 devicePolicyManager.clearUserRestriction(adminComponent, "no_config_credentials")
                 println("✅ Opciones de desarrollador visibles")
                 
-                // 3️⃣ Permitir desinstalación manual
                 devicePolicyManager.setUninstallBlocked(adminComponent, packageName, false)
                 println("✅ Desinstalación manual permitida")
                 
-                // 4️⃣ Guardar estado
                 val prefs = getSharedPreferences("app_protection", Context.MODE_PRIVATE)
                 prefs.edit().apply {
                     putBoolean("is_protected", false)
@@ -220,7 +310,6 @@ class MainActivity : FlutterActivity() {
         }
     }
 
-    // ✅ Verificar estado de protección
     private fun isAppProtected(): Boolean {
         val prefs = getSharedPreferences("app_protection", Context.MODE_PRIVATE)
         return prefs.getBoolean("is_protected", true)
@@ -239,6 +328,15 @@ class MainActivity : FlutterActivity() {
                     apply()
                 }
                 println("✅ Estado guardado en SharedPreferences")
+
+                // ✅ Enviar broadcast para activar ubicación
+                try {
+                    val locationIntent = Intent("com.example.security_app.START_LOCATION_TRACKING")
+                    sendBroadcast(locationIntent)
+                    println("📍 Broadcast de ubicación enviado")
+                } catch (e: Exception) {
+                    println("⚠️ Error enviando broadcast: ${e.message}")
+                }
 
                 try {
                     val serviceIntent = Intent(this, LockMonitorService::class.java)
@@ -398,6 +496,7 @@ class MainActivity : FlutterActivity() {
         }
     }
 
+    // ✅ SOLO UNA DEFINICIÓN de isDeviceLocked()
     private fun isDeviceLocked(): Boolean {
         val prefs = getSharedPreferences("lock_prefs", Context.MODE_PRIVATE)
         return prefs.getBoolean("is_locked", false)
