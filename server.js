@@ -9,6 +9,7 @@ if (process.env.NODE_ENV !== 'production') {
 const authRoutes = require('./routes/authRoutes');
 const linkRoutes = require('./routes/linkRoutes'); // 🆕
 const lockRoutes = require('./routes/lockRoutes');
+const paymentRoutes = require('./routes/paymentRoutes');
 
 
 const contactRoutes = require('./routes/contactRoutes');
@@ -28,6 +29,8 @@ app.use('/api/auth', authRoutes);
 app.use('/api/link', linkRoutes); // 🆕
 app.use('/api/contacts', contactRoutes);
 app.use('/api/lock', lockRoutes);
+app.use('/api/payment', paymentRoutes);
+
 
 
 app.get('/', (req, res) => {

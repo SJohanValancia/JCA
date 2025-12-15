@@ -82,13 +82,26 @@ class _VendorHomeScreenState extends State<VendorHomeScreen> {
     super.dispose();
   }
 
-  Future<void> _loadUserData() async {
-    _currentUser = await _authService.getUser();
-    if (mounted) {
-      setState(() => _isLoading = false);
-    }
-    _checkPendingRequests();
+Future<void> _loadUserData() async {
+  _currentUser = await _authService.getUser();
+  
+  // ✅ AGREGAR ESTOS PRINTS:
+  print('═══════════════════════════════════════');
+  print('📱 USUARIO CARGADO EN HOME SCREEN:');
+  print('   Nombre: ${_currentUser?.nombre}');
+  print('   Rol: ${_currentUser?.rol}');
+  print('   Deuda Total: ${_currentUser?.deudaInfo?.deudaTotal}');
+  print('   Deuda Restante: ${_currentUser?.deudaInfo?.deudaRestante}');
+  print('   Cuotas Pagadas: ${_currentUser?.deudaInfo?.cuotasPagadas}');
+  print('   Cuotas Pendientes: ${_currentUser?.deudaInfo?.cuotasPendientes}');
+  print('   Monto Cuota: ${_currentUser?.deudaInfo?.montoCuota}');
+  print('═══════════════════════════════════════');
+  
+  if (mounted) {
+    setState(() => _isLoading = false);
   }
+  _checkPendingRequests();
+}
 
   void _startRequestChecker() {
     _requestCheckTimer = Timer.periodic(

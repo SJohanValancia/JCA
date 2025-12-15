@@ -33,6 +33,19 @@ class DeudaInfo {
           : null,
     );
   }
+
+  // ✅ AGREGAR MÉTODO toJson para DeudaInfo
+  Map<String, dynamic> toJson() {
+    return {
+      'deudaTotal': deudaTotal,
+      'deudaRestante': deudaRestante,
+      'cuotasPagadas': cuotasPagadas,
+      'cuotasPendientes': cuotasPendientes,
+      'montoCuota': montoCuota,
+      'proximoPago': proximoPago?.toIso8601String(),
+      'ultimoPago': ultimoPago?.toIso8601String(),
+    };
+  }
 }
 
 class UserModel {
@@ -61,13 +74,14 @@ class UserModel {
       telefono: json['telefono'] ?? '',
       usuario: json['usuario'] ?? '',
       jcId: json['jcId'] ?? 'N/A',
-      rol: json['rol'] ?? 'dueno', // ✅ Sin ñ
+      rol: json['rol'] ?? 'dueno',
       deudaInfo: json['deudaInfo'] != null 
           ? DeudaInfo.fromJson(json['deudaInfo'])
           : null,
     );
   }
 
+  // ✅ CORREGIR: Incluir deudaInfo en toJson()
   Map<String, dynamic> toJson() {
     return {
       'id': id,
@@ -76,10 +90,10 @@ class UserModel {
       'usuario': usuario,
       'jcId': jcId,
       'rol': rol,
+      'deudaInfo': deudaInfo?.toJson(), // ✅ AGREGAR ESTA LÍNEA
     };
   }
 
-  // ✅ Helper para verificar rol (sin ñ)
   bool get isDueno => rol == 'dueno';
   bool get isVendedor => rol == 'vendedor';
 }

@@ -1,3 +1,5 @@
+import 'user_model.dart'; // Importar para usar DeudaInfo
+
 class LinkedUserModel {
   final String id;
   final String nombre;
@@ -11,7 +13,8 @@ class LinkedUserModel {
   final bool? isCharging;
   final double? accuracy;
   final DateTime? timestamp;
-  final bool? isLocked; // ✅ AGREGADO
+  final bool? isLocked;
+  final DeudaInfo? deudaInfo; // ✅ AGREGADO
 
   LinkedUserModel({
     required this.id,
@@ -26,7 +29,8 @@ class LinkedUserModel {
     this.isCharging,
     this.accuracy,
     this.timestamp,
-    this.isLocked, // ✅ AGREGADO
+    this.isLocked,
+    this.deudaInfo, // ✅ AGREGADO
   });
 
   factory LinkedUserModel.fromJson(Map<String, dynamic> json) {
@@ -45,8 +49,33 @@ class LinkedUserModel {
       timestamp: json['timestamp'] != null 
           ? DateTime.parse(json['timestamp']) 
           : null,
-      isLocked: json['userId']?['isLocked'] ?? json['isLocked'] ?? false, // ✅ AGREGADO
+      isLocked: json['userId']?['isLocked'] ?? json['isLocked'] ?? false,
+      deudaInfo: json['userId']?['deudaInfo'] != null // ✅ AGREGADO
+          ? DeudaInfo.fromJson(json['userId']['deudaInfo'])
+          : (json['deudaInfo'] != null 
+              ? DeudaInfo.fromJson(json['deudaInfo'])
+              : null),
     );
+  }
+
+  // ✅ AGREGAR toJson() para serialización completa
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'nombre': nombre,
+      'usuario': usuario,
+      'jcId': jcId,
+      'rol': rol,
+      'latitude': latitude,
+      'longitude': longitude,
+      'address': address,
+      'batteryLevel': batteryLevel,
+      'isCharging': isCharging,
+      'accuracy': accuracy,
+      'timestamp': timestamp?.toIso8601String(),
+      'isLocked': isLocked,
+      'deudaInfo': deudaInfo?.toJson(),
+    };
   }
 
   // Helper para verificar si es vendedor

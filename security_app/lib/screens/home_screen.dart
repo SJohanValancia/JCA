@@ -16,6 +16,8 @@ import 'dart:async';
 import 'vendor_home_screen.dart';
 import 'qr_provisioning_screen.dart';
 import '../services/location_tracking_service.dart';
+import 'add_payment_dialog.dart';
+
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -533,50 +535,79 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildMainReportButton() {
-    return InkWell(
-      onTap: _showReportDialog,
-      child: Container(
-        height: 180,
-        decoration: BoxDecoration(
-          gradient: const LinearGradient(
-            colors: [Color(0xFFEF4444), Color(0xFFDC2626)],
+Widget _buildMainReportButton() {
+  return InkWell(
+    onTap: _showAddPaymentDialog,
+    child: Container(
+      height: 180,
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [Color(0xFF10B981), Color(0xFF059669)],
+        ),
+        borderRadius: BorderRadius.circular(30),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF10B981).withOpacity(0.3),
+            blurRadius: 15,
+            offset: const Offset(0, 8),
           ),
-          borderRadius: BorderRadius.circular(30),
-          boxShadow: [
-            BoxShadow(
-              color: const Color(0xFFEF4444).withOpacity(0.3),
-              blurRadius: 15,
-              offset: const Offset(0, 8),
+        ],
+      ),
+      child: const Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.payments, size: 60, color: Colors.white),
+            SizedBox(height: 16),
+            Text(
+              'AGREGAR ABONO',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 28,
+                fontWeight: FontWeight.bold,
+                letterSpacing: 1.5,
+              ),
+            ),
+            SizedBox(height: 8),
+            Text(
+              'Registrar pago de vendedor',
+              style: TextStyle(color: Colors.white70, fontSize: 14),
             ),
           ],
         ),
-        child: const Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(Icons.emergency, size: 60, color: Colors.white),
-              SizedBox(height: 16),
-              Text(
-                'REPORTAR',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 32,
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: 2,
-                ),
-              ),
-              SizedBox(height: 8),
-              Text(
-                'Emergencia o Situación de Riesgo',
-                style: TextStyle(color: Colors.white70, fontSize: 14),
-              ),
-            ],
-          ),
-        ),
+      ),
+    ),
+  );
+}
+
+// Agregar este método
+Future<void> _showAddPaymentDialog() async {
+  // Obtener vendedores vinculados
+  final vendedores = await _linkService.getLinkedDevices();
+  
+  if (!mounted) return;
+
+  if (vendedores.isEmpty) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('❌ No tienes vendedores vinculados'),
+        backgroundColor: Colors.orange,
       ),
     );
+    return;
   }
+
+  final result = await showDialog<bool>(
+    context: context,
+    builder: (context) => AddPaymentDialog(vendedores: vendedores),
+  );
+
+  // Si se registró un abono exitosamente, recargar datos si es necesario
+  if (result == true && mounted) {
+    // Aquí puedes recargar datos si es necesario
+    print('✅ Abono registrado correctamente');
+  }
+}
 
   Widget _buildOptionsGrid() {
     return Column(
