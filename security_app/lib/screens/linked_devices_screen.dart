@@ -212,14 +212,16 @@ class _LinkedDevicesScreenState extends State<LinkedDevicesScreen> {
   }
 
   // ✅ NUEVO: Diálogo de liberación de app con PIN
-  Future<void> _showReleaseAppDialog(LinkedUserModel device) async {
-    _pinAttempts = 0;
-    final pinController = TextEditingController();
-    
-    await showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (dialogContext) => AlertDialog(
+Future<void> _showReleaseAppDialog(LinkedUserModel device) async {
+  _pinAttempts = 0;
+  final pinController = TextEditingController();
+  
+  final result = await showDialog<bool>(
+    context: context,
+    barrierDismissible: false,
+    builder: (dialogContext) => WillPopScope(
+      onWillPop: () async => false,
+      child: AlertDialog(
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(20),
         ),
@@ -301,7 +303,7 @@ class _LinkedDevicesScreenState extends State<LinkedDevicesScreen> {
           TextButton(
             onPressed: () {
               pinController.dispose();
-              Navigator.pop(dialogContext);
+              Navigator.of(dialogContext).pop(false);
             },
             child: const Text('Cancelar'),
           ),
@@ -312,8 +314,7 @@ class _LinkedDevicesScreenState extends State<LinkedDevicesScreen> {
               if (pin == '0000') {
                 // ✅ PIN correcto
                 pinController.dispose();
-                Navigator.pop(dialogContext);
-                _releaseAppWithConfirmation(device);
+                Navigator.of(dialogContext).pop(true);
               } else {
                 // ❌ PIN incorrecto
                 _pinAttempts++;
@@ -321,10 +322,14 @@ class _LinkedDevicesScreenState extends State<LinkedDevicesScreen> {
                 if (_pinAttempts >= 3) {
                   // Cerrar sesión después de 3 intentos
                   pinController.dispose();
-                  Navigator.pop(dialogContext);
-                  await _authService.logout();
+                  Navigator.of(dialogContext).pop(false);
+                  
+                  // ✅ Esperar un frame
+                  await Future.delayed(const Duration(milliseconds: 100));
                   
                   if (mounted) {
+                    await _authService.logout();
+                    
                     ScaffoldMessenger.of(context).showSnackBar(
                       const SnackBar(
                         content: Text('❌ 3 intentos fallidos. Sesión cerrada por seguridad.'),
@@ -333,12 +338,17 @@ class _LinkedDevicesScreenState extends State<LinkedDevicesScreen> {
                       ),
                     );
                     
-                    Navigator.pushReplacement(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => const LoginScreen(),
-                      ),
-                    );
+                    // ✅ Esperar otro frame antes de navegar
+                    await Future.delayed(const Duration(milliseconds: 100));
+                    
+                    if (mounted) {
+                      Navigator.of(context).pushAndRemoveUntil(
+                        MaterialPageRoute(
+                          builder: (context) => const LoginScreen(),
+                        ),
+                        (route) => false,
+                      );
+                    }
                   }
                 } else {
                   // Mostrar error
@@ -363,26 +373,44 @@ class _LinkedDevicesScreenState extends State<LinkedDevicesScreen> {
           ),
         ],
       ),
-    );
+    ),
+  );
+  
+  // ✅ Si el PIN fue correcto, liberar la app
+  if (result == true && mounted) {
+    _releaseAppWithConfirmation(device);
   }
-
+}
   // ✅ NUEVO: Confirmar y ejecutar liberación
-  Future<void> _releaseAppWithConfirmation(LinkedUserModel device) async {
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => const Center(
+Future<void> _releaseAppWithConfirmation(LinkedUserModel device) async {
+  // ✅ Esperar un frame antes de mostrar el loading
+  await Future.delayed(const Duration(milliseconds: 100));
+  
+  if (!mounted) return;
+  
+  showDialog(
+    context: context,
+    barrierDismissible: false,
+    builder: (loadingContext) => WillPopScope(
+      onWillPop: () async => false,
+      child: const Center(
         child: CircularProgressIndicator(),
       ),
-    );
+    ),
+  );
+  
+  print('🔓 Liberando app del dispositivo...');
+  
+  final success = await _appProtectionService.releaseApp(device.id);
+  
+  if (mounted) {
+    // ✅ Cerrar el loading con Navigator.of(context, rootNavigator: true)
+    Navigator.of(context, rootNavigator: true).pop();
     
-    print('🔓 Liberando app del dispositivo...');
-    
-    final success = await _appProtectionService.releaseApp(device.id);
+    // ✅ Esperar un frame antes de mostrar el SnackBar
+    await Future.delayed(const Duration(milliseconds: 100));
     
     if (mounted) {
-      Navigator.pop(context);
-      
       if (success) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -404,7 +432,7 @@ class _LinkedDevicesScreenState extends State<LinkedDevicesScreen> {
       }
     }
   }
-
+}
   @override
   Widget build(BuildContext context) {
     return Scaffold(

@@ -33,6 +33,9 @@ class _HomeScreenState extends State<HomeScreen> {
   List<LinkRequest> _pendingRequests = [];
   Timer? _requestCheckTimer;
   bool _isDialogOpen = false;
+  
+  // ✅ NUEVO: MethodChannel para comunicarse con Kotlin
+  static const platform = MethodChannel('com.example.security_app/device_owner');
 
   @override
   void initState() {
@@ -62,6 +65,7 @@ Future<void> _initializeApp() async {
   _backgroundTasks();
   _checkPendingRequests();
 }
+
   void _backgroundTasks() {
     _deviceService.saveDeviceToBackend();
     _permissionService.requestPermissions(context);
@@ -88,6 +92,98 @@ Future<void> _initializeApp() async {
         _showLinkRequestDialog(requests.first);
       }
     }
+  }
+
+  // ✅ NUEVO: Activar depuración USB
+  Future<void> _enableUSBDebugging() async {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+        ),
+        title: const Row(
+          children: [
+            Icon(Icons.warning, color: Colors.orange, size: 28),
+            SizedBox(width: 12),
+            Text('Activar Depuración USB'),
+          ],
+        ),
+        content: const Text(
+          '¿Estás seguro?\n\n'
+          'Esto habilitará:\n'
+          '• Depuración USB\n'
+          '• Opciones de desarrollador\n'
+          '• Actualizaciones via ADB\n\n'
+          'Solo hazlo si necesitas actualizar la app.',
+          style: TextStyle(fontSize: 15, height: 1.5),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancelar'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              Navigator.pop(context);
+              
+              // Mostrar loading
+              showDialog(
+                context: context,
+                barrierDismissible: false,
+                builder: (context) => const Center(
+                  child: CircularProgressIndicator(),
+                ),
+              );
+              
+              try {
+                final result = await platform.invokeMethod('releaseApp', {
+                  'vendorId': 'manual_unlock',
+                });
+                
+                if (mounted) {
+                  Navigator.pop(context); // Cerrar loading
+                  
+                  if (result == true) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('✅ Depuración USB habilitada\n'
+                            'Ahora puedes actualizar via ADB'),
+                        backgroundColor: Colors.green,
+                        duration: Duration(seconds: 4),
+                      ),
+                    );
+                  } else {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('❌ Error al habilitar depuración'),
+                        backgroundColor: Colors.red,
+                      ),
+                    );
+                  }
+                }
+              } catch (e) {
+                if (mounted) {
+                  Navigator.pop(context); // Cerrar loading
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('❌ Error: $e'),
+                      backgroundColor: Colors.red,
+                    ),
+                  );
+                }
+              }
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.orange,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Activar'),
+          ),
+        ],
+      ),
+    );
   }
 
 void _showLinkRequestDialog(LinkRequest request) {
@@ -456,9 +552,15 @@ Widget _buildHeader() {
                 ),
               ],
             ),
-            // ✅ ROW con ambos botones
+            // ✅ ROW con los 3 botones
             Row(
               children: [
+                // ✅ NUEVO: Botón para activar depuración
+                IconButton(
+                  onPressed: _enableUSBDebugging,
+                  icon: const Icon(Icons.developer_mode, color: Colors.orange, size: 28),
+                  tooltip: 'Activar Depuración USB',
+                ),
                 // Botón QR Provisioning
                 IconButton(
                   onPressed: () {
@@ -538,6 +640,7 @@ Widget _buildHeader() {
     ),
   );
 }
+
   Widget _buildMainReportButton() {
     return InkWell(
       onTap: _showReportDialog,
