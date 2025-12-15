@@ -16,7 +16,8 @@ router.post('/unlink', linkController.unlinkDevice);
 // Ubicaciones
 router.post('/location/update', linkController.updateLocation);
 router.get('/location/linked', linkController.getLinkedLocations);
-router.get('/location/blocked-vendors', linkController.getBlockedVendorsLocations); // ✅ NUEVO
+// ❌ ELIMINAR ESTA LÍNEA - La función no existe:
+// router.get('/location/blocked-vendors', linkController.getBlockedVendorsLocations);
 
 // Configuración de deuda
 router.post('/debt/configure', linkController.configureDebt);
