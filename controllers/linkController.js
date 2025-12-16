@@ -504,6 +504,7 @@ exports.registerPayment = async (req, res) => {
 };
 
 // Función auxiliar para calcular próximo pago
+// Función auxiliar para calcular próximo pago
 function calcularProximoPago(modalidad, diasPago, fechaInicio) {
   const ahora = new Date(fechaInicio);
   let proximoPago = new Date(ahora);
@@ -551,3 +552,72 @@ function calcularProximoPago(modalidad, diasPago, fechaInicio) {
 
   return proximoPago;
 }
+
+// ✅ MEJORADO: Obtener ubicaciones solo de vendedores bloqueados (CON LOGS)
+exports.getBlockedVendorsLocations = async (req, res) => {
+  try {
+    const duenoId = req.user.id;
+
+    console.log('🔍 [BLOCKED] Consultando vendedores bloqueados para dueño:', duenoId);
+
+    // Verificar que sea dueño
+    const dueno = await User.findById(duenoId);
+    if (dueno.rol !== 'dueno') {
+      return res.status(403).json({
+        success: false,
+        message: 'Solo los dueños pueden ver ubicaciones de vendedores bloqueados'
+      });
+    }
+
+    // Obtener vendedores vinculados
+    const links = await DeviceLink.find({
+      userId: duenoId,
+      status: 'active'
+    }).select('linkedUserId');
+
+    const linkedUserIds = links.map(link => link.linkedUserId);
+    console.log('📱 [BLOCKED] Usuarios vinculados:', linkedUserIds.length);
+
+    // Primero, obtener TODOS los usuarios vinculados
+    const allLinkedUsers = await User.find({
+      _id: { $in: linkedUserIds },
+      rol: 'vendedor'
+    }).select('nombre jcId isLocked');
+
+    console.log('👥 [BLOCKED] Vendedores vinculados:');
+    allLinkedUsers.forEach(user => {
+      console.log(`   - ${user.nombre} (${user.jcId}): isLocked=${user.isLocked}`);
+    });
+
+    // Obtener ubicaciones de TODOS los vendedores
+    const allLocations = await Location.find({
+      userId: { $in: linkedUserIds }
+    }).populate('userId', 'nombre usuario jcId rol isLocked deudaInfo');
+
+    console.log('📍 [BLOCKED] Ubicaciones encontradas:', allLocations.length);
+    allLocations.forEach(loc => {
+      if (loc.userId) {
+        console.log(`   - ${loc.userId.nombre}: isLocked=${loc.userId.isLocked}, lat=${loc.latitude}, lon=${loc.longitude}`);
+      }
+    });
+
+    // Filtrar solo los bloqueados
+    const blockedLocations = allLocations.filter(loc => 
+      loc.userId !== null && loc.userId.isLocked === true
+    );
+
+    console.log(`✅ [BLOCKED] Vendedores BLOQUEADOS con ubicación: ${blockedLocations.length}`);
+
+    res.json({
+      success: true,
+      locations: blockedLocations
+    });
+
+  } catch (error) {
+    console.error('❌ [BLOCKED] Error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error en el servidor'
+    });
+  }
+};

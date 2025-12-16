@@ -4,6 +4,7 @@ import 'package:http/http.dart' as http;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../models/linked_user_model.dart';
 import '../models/debt_config_model.dart';
+import '../models/user_model.dart'; 
 
 class LinkService {
   static const String baseUrl = 'https://jca-labd.onrender.com';
@@ -128,17 +129,28 @@ Future<List<LinkedUserModel>> getLinkedDevices() async {
       
       print('✅ Dispositivos vinculados: ${devices.length}');
       
-      // ✅ CORREGIDO: Incluir el campo 'rol'
+      // ✅ CORREGIDO: Leer directamente del objeto, no de linkedUserId
       return devices.map((d) {
-        final linkedUser = d['linkedUserId'];
+        // ✅ Ya no buscar linkedUserId, usar directamente 'd'
+        if (d == null) {
+          print('⚠️ Dispositivo es null');
+          return null;
+        }
+        
         return LinkedUserModel(
-          id: linkedUser['_id'] ?? '',
-          nombre: linkedUser['nombre'] ?? '',
-          usuario: linkedUser['usuario'] ?? '',
-          jcId: linkedUser['jcId'] ?? '',
-          rol: linkedUser['rol'], // ✅ AGREGADO
+          id: d['id'] ?? '',  // ✅ Cambio aquí
+          nombre: d['nombre'] ?? '',
+          usuario: d['usuario'] ?? '',
+          jcId: d['jcId'] ?? '',
+          rol: d['rol'],
+          deudaInfo: d['deudaInfo'] != null
+              ? DeudaInfo.fromJson(d['deudaInfo'])
+              : null,
         );
-      }).toList();
+      })
+      .where((device) => device != null)
+      .cast<LinkedUserModel>()
+      .toList();
     }
     return [];
   } catch (e) {
@@ -146,7 +158,7 @@ Future<List<LinkedUserModel>> getLinkedDevices() async {
     return [];
   }
 }
-  Future<bool> updateLocation({
+ Future<bool> updateLocation({
     required double latitude,
     required double longitude,
     String? address,
@@ -305,6 +317,32 @@ Future<List<LinkedUserModel>> getLinkedDevices() async {
       return false;
     }
   }
+
+
+  // ✅ NUEVO: Obtener solo ubicaciones de vendedores bloqueados
+Future<List<LinkedUserModel>> getBlockedVendorsLocations() async {
+  try {
+    final headers = await _getHeaders();
+    
+    final response = await http.get(
+      Uri.parse('$baseUrl/api/link/location/blocked-vendors'),
+      headers: headers,
+    ).timeout(_timeout);
+
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body);
+      final List locations = data['locations'] ?? [];
+      
+      print('📍 Vendedores bloqueados recibidos: ${locations.length}');
+      
+      return locations.map((l) => LinkedUserModel.fromJson(l)).toList();
+    }
+    return [];
+  } catch (e) {
+    print('❌ Error obteniendo vendedores bloqueados: $e');
+    return [];
+  }
+}
 
 }
 

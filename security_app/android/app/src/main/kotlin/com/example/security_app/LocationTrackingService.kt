@@ -98,8 +98,8 @@ class LocationTrackingService : Service() {
 
     private fun startLocationUpdates() {
         val locationRequest = LocationRequest.create().apply {
-            interval = 5000 // Cada 5 segundos
-            fastestInterval = 3000 // Mínimo 3 segundos
+            interval = 10000 // ✅ Cada 10 segundos
+            fastestInterval = 5000
             priority = LocationRequest.PRIORITY_HIGH_ACCURACY
         }
 

@@ -14,11 +14,10 @@ router.get('/devices', linkController.getLinkedDevices);
 router.post('/unlink', linkController.unlinkDevice);
 
 // Ubicaciones
+// Ubicaciones
 router.post('/location/update', linkController.updateLocation);
 router.get('/location/linked', linkController.getLinkedLocations);
-// ❌ ELIMINAR ESTA LÍNEA - La función no existe:
-// router.get('/location/blocked-vendors', linkController.getBlockedVendorsLocations);
-
+router.get('/location/blocked-vendors', linkController.getBlockedVendorsLocations); // ✅ NUEVA LÍNEA
 // Configuración de deuda
 router.post('/debt/configure', linkController.configureDebt);
 router.get('/debt/:linkedUserId', linkController.getDebtConfig);

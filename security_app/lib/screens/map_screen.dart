@@ -60,7 +60,7 @@ class _MapScreenState extends State<MapScreen> {
 
   void _startLocationUpdates() {
     _locationUpdateTimer = Timer.periodic(
-      const Duration(seconds: 30),
+      const Duration(seconds: 10), // ✅ Actualizar cada 10 segundos
       (timer) async {
         if (_currentPosition != null) {
           await _updateMyLocation();
@@ -86,20 +86,19 @@ class _MapScreenState extends State<MapScreen> {
     );
   }
 
-  Future<void> _loadLinkedLocations() async {
-    final locations = await _linkService.getLinkedLocations();
+Future<void> _loadLinkedLocations() async {
+  // ✅ CAMBIO: Usar endpoint específico para vendedores bloqueados
+  final locations = await _linkService.getBlockedVendorsLocations();
+  
+  if (mounted && !_isDisposed) {
+    setState(() {
+      _linkedLocations = locations;
+    });
+    _updateMarkers();
     
-    if (mounted && !_isDisposed) {
-      setState(() {
-        // ✅ FILTRAR: Solo usuarios bloqueados
-        _linkedLocations = locations.where((user) {
-          return user.isLocked == true;
-        }).toList();
-      });
-      _updateMarkers();
-    }
+    print('🗺️ Mapa actualizado: ${locations.length} vendedores bloqueados');
   }
-
+}
   // ✅ MÉTODO CORREGIDO
   Future<void> _getCurrentLocation() async {
     if (_isDisposed) return;
@@ -292,21 +291,23 @@ class _MapScreenState extends State<MapScreen> {
     }
   }
 
-  void _updateMarkers() {
-    if (_currentPosition == null) return;
-    
-    _userMarkers.clear();
-    
-    _addUserMarker(_currentPosition!);
-    
-    for (var linkedUser in _linkedLocations) {
-      if (linkedUser.latitude != null && linkedUser.longitude != null) {
-        _addLinkedUserMarker(linkedUser);
-      }
+void _updateMarkers() {
+  if (_currentPosition == null) return;
+  
+  _userMarkers.clear();
+  
+  // ✅ Solo agregar marcador del usuario actual
+  _addUserMarker(_currentPosition!);
+  
+  // ✅ Agregar solo vendedores bloqueados
+  for (var linkedUser in _linkedLocations) {
+    if (linkedUser.latitude != null && linkedUser.longitude != null) {
+      _addLinkedUserMarker(linkedUser);
     }
-    
-    if (mounted) setState(() {});
   }
+  
+  if (mounted) setState(() {});
+}
 
   String _getDefaultName(String type) {
     switch (type) {
