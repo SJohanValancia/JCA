@@ -190,25 +190,61 @@ exports.getLinkedDevices = async (req, res) => {
   try {
     const userId = req.user.id;
 
+    console.log('📱 [DEVICES] Obteniendo dispositivos para usuario:', userId);
+
     const links = await DeviceLink.find({
       userId,
       status: 'active'
-    }).populate('linkedUserId', 'nombre usuario jcId rol isLocked deudaInfo'); // ✅ AGREGADO deudaInfo
+    }).populate({
+      path: 'linkedUserId',
+      select: 'nombre usuario jcId rol isLocked deudaInfo'
+    });
 
-    console.log('📱 Dispositivos vinculados encontrados:', links.length);
+    console.log('📱 [DEVICES] Vínculos encontrados:', links.length);
     
-    // ✅ Formatear la respuesta para incluir toda la información
-    const linkedDevices = links.map(link => ({
-      id: link.linkedUserId._id,
-      nombre: link.linkedUserId.nombre,
-      usuario: link.linkedUserId.usuario,
-      jcId: link.linkedUserId.jcId,
-      rol: link.linkedUserId.rol,
-      isLocked: link.linkedUserId.isLocked,
-      deudaInfo: link.linkedUserId.deudaInfo || null // ✅ INCLUIR deudaInfo
-    }));
+    // ✅ FILTRAR vínculos válidos
+    const validLinks = links.filter(link => {
+      if (!link.linkedUserId) {
+        console.log('⚠️ [DEVICES] Vínculo sin linkedUserId:', link._id);
+        return false;
+      }
+      return true;
+    });
+    
+    console.log('✅ [DEVICES] Vínculos válidos:', validLinks.length);
+    
+    // ✅ Formatear respuesta con manejo seguro de deudaInfo
+    const linkedDevices = validLinks.map(link => {
+      const user = link.linkedUserId;
+      
+      // ✅ Manejo seguro de deudaInfo
+      let deudaInfo = null;
+      if (user.deudaInfo && typeof user.deudaInfo === 'object') {
+        deudaInfo = {
+          deudaTotal: user.deudaInfo.deudaTotal || 0,
+          deudaRestante: user.deudaInfo.deudaRestante || 0,
+          cuotasPagadas: user.deudaInfo.cuotasPagadas || 0,
+          cuotasPendientes: user.deudaInfo.cuotasPendientes || 0,
+          montoCuota: user.deudaInfo.montoCuota || 0,
+          proximoPago: user.deudaInfo.proximoPago || null,
+          ultimoPago: user.deudaInfo.ultimoPago || null
+        };
+      }
+      
+      return {
+        id: user._id.toString(),
+        nombre: user.nombre,
+        usuario: user.usuario,
+        jcId: user.jcId,
+        rol: user.rol,
+        isLocked: user.isLocked || false,
+        deudaInfo: deudaInfo
+      };
+    });
 
-    console.log('💰 Vendedores con deuda:', linkedDevices.filter(d => d.rol === 'vendedor' && d.deudaInfo));
+    console.log('💰 [DEVICES] Vendedores con deuda:', 
+      linkedDevices.filter(d => d.rol === 'vendedor' && d.deudaInfo).length
+    );
 
     res.json({
       success: true,
@@ -216,10 +252,13 @@ exports.getLinkedDevices = async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Error obteniendo dispositivos vinculados:', error);
+    console.error('❌ [DEVICES] Error:', error);
+    console.error('Stack:', error.stack);
+    
     res.status(500).json({
       success: false,
-      message: 'Error en el servidor'
+      message: 'Error en el servidor',
+      error: error.message
     });
   }
 };
@@ -560,7 +599,6 @@ exports.getBlockedVendorsLocations = async (req, res) => {
 
     console.log('🔍 [BLOCKED] Consultando vendedores bloqueados para dueño:', duenoId);
 
-    // Verificar que sea dueño
     const dueno = await User.findById(duenoId);
     if (dueno.rol !== 'dueno') {
       return res.status(403).json({
@@ -569,16 +607,18 @@ exports.getBlockedVendorsLocations = async (req, res) => {
       });
     }
 
-    // Obtener vendedores vinculados
     const links = await DeviceLink.find({
       userId: duenoId,
       status: 'active'
     }).select('linkedUserId');
 
-    const linkedUserIds = links.map(link => link.linkedUserId);
+    const linkedUserIds = links
+      .filter(link => link.linkedUserId)
+      .map(link => link.linkedUserId);
+    
     console.log('📱 [BLOCKED] Usuarios vinculados:', linkedUserIds.length);
 
-    // Primero, obtener TODOS los usuarios vinculados
+    // Obtener usuarios vendedores
     const allLinkedUsers = await User.find({
       _id: { $in: linkedUserIds },
       rol: 'vendedor'
@@ -589,21 +629,32 @@ exports.getBlockedVendorsLocations = async (req, res) => {
       console.log(`   - ${user.nombre} (${user.jcId}): isLocked=${user.isLocked}`);
     });
 
-    // Obtener ubicaciones de TODOS los vendedores
+    // Obtener ubicaciones
     const allLocations = await Location.find({
       userId: { $in: linkedUserIds }
-    }).populate('userId', 'nombre usuario jcId rol isLocked deudaInfo');
-
-    console.log('📍 [BLOCKED] Ubicaciones encontradas:', allLocations.length);
-    allLocations.forEach(loc => {
-      if (loc.userId) {
-        console.log(`   - ${loc.userId.nombre}: isLocked=${loc.userId.isLocked}, lat=${loc.latitude}, lon=${loc.longitude}`);
-      }
+    }).populate({
+      path: 'userId',
+      select: 'nombre usuario jcId rol isLocked deudaInfo'
     });
 
-    // Filtrar solo los bloqueados
-    const blockedLocations = allLocations.filter(loc => 
-      loc.userId !== null && loc.userId.isLocked === true
+    console.log('📍 [BLOCKED] Ubicaciones encontradas:', allLocations.length);
+    
+    // Filtrar ubicaciones válidas
+    const validLocations = allLocations.filter(loc => {
+      if (!loc.userId) {
+        console.log('⚠️ [BLOCKED] Ubicación sin userId');
+        return false;
+      }
+      return true;
+    });
+    
+    validLocations.forEach(loc => {
+      console.log(`   - ${loc.userId.nombre}: isLocked=${loc.userId.isLocked}, lat=${loc.latitude}, lon=${loc.longitude}`);
+    });
+
+    // Filtrar solo bloqueados
+    const blockedLocations = validLocations.filter(loc => 
+      loc.userId.isLocked === true
     );
 
     console.log(`✅ [BLOCKED] Vendedores BLOQUEADOS con ubicación: ${blockedLocations.length}`);
@@ -615,9 +666,12 @@ exports.getBlockedVendorsLocations = async (req, res) => {
 
   } catch (error) {
     console.error('❌ [BLOCKED] Error:', error);
+    console.error('Stack:', error.stack);
+    
     res.status(500).json({
       success: false,
-      message: 'Error en el servidor'
+      message: 'Error en el servidor',
+      error: error.message
     });
   }
 };

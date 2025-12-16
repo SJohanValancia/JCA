@@ -188,35 +188,44 @@ class LockMonitorService : Service() {
 
 private fun lockDeviceNow(message: String) {
     try {
+        println("🔒 [SERVICE] ===== INICIANDO PROCESO DE BLOQUEO =====")
+        
         val prefs = getSharedPreferences("lock_prefs", Context.MODE_PRIVATE)
         prefs.edit().apply {
             putString("lock_message", message)
             putBoolean("is_locked", true)
-            putBoolean("tracking_active", true) // ✅ NUEVO
+            putBoolean("tracking_active", true)
             putLong("lock_activation_time", System.currentTimeMillis())
             apply()
         }
+        println("✅ [SERVICE] Estado guardado")
 
-        // ✅ NUEVO: Iniciar servicio de ubicación
+        // ✅ INICIAR SERVICIO DE UBICACIÓN
         try {
+            println("📍 [SERVICE] Iniciando LocationTrackingService...")
             val locationIntent = Intent(this, LocationTrackingService::class.java)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 startForegroundService(locationIntent)
             } else {
                 startService(locationIntent)
             }
-            println("✅ [SERVICE] Servicio de ubicación iniciado")
+            
+            // Esperar 3 segundos
+            Thread.sleep(3000)
+            println("✅ [SERVICE] LocationTrackingService iniciado")
+            
         } catch (e: Exception) {
             println("❌ [SERVICE] Error iniciando ubicación: ${e.message}")
         }
 
+        // Lanzar pantalla de bloqueo
         val intent = Intent(this, LockScreenActivity::class.java)
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
         startActivity(intent)
         
-        println("✅ [SERVICE] Pantalla de bloqueo lanzada")
+        println("✅ [SERVICE] ===== BLOQUEO COMPLETADO =====")
     } catch (e: Exception) {
-        println("❌ [SERVICE] Error bloqueando: ${e.message}")
+        println("❌ [SERVICE] Error: ${e.message}")
     }
 }
 

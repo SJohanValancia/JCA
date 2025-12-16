@@ -119,48 +119,67 @@ class LocationTrackingService : Service() {
         }
     }
 
-    private fun sendLocationToBackend(location: Location) {
-        Thread {
-            try {
-                val securePrefs = getSharedPreferences(
-                    "flutter.flutter_secure_storage",
-                    Context.MODE_PRIVATE
-                )
-                val token = securePrefs.getString("flutter.token", null)
+private fun sendLocationToBackend(location: Location) {
+    Thread {
+        try {
+            println("🌐 [LOCATION] ==========================================")
+            println("📍 [LOCATION] Enviando ubicación al backend...")
+            
+            val securePrefs = getSharedPreferences(
+                "flutter.flutter_secure_storage",
+                Context.MODE_PRIVATE
+            )
+            val token = securePrefs.getString("flutter.token", null)
 
-                if (token == null) {
-                    println("⚠️ [LOCATION] No hay token")
-                    return@Thread
-                }
-
-                val json = JSONObject().apply {
-                    put("latitude", location.latitude)
-                    put("longitude", location.longitude)
-                    put("accuracy", location.accuracy)
-                    put("timestamp", System.currentTimeMillis())
-                }
-
-                val body = json.toString().toRequestBody("application/json".toMediaType())
-
-                val request = Request.Builder()
-                    .url("$baseUrl/api/location/update")
-                    .addHeader("Authorization", "Bearer $token")
-                    .post(body)
-                    .build()
-
-                val response = client.newCall(request).execute()
-
-                if (response.isSuccessful) {
-                    println("✅ [LOCATION] Ubicación enviada correctamente")
-                } else {
-                    println("⚠️ [LOCATION] Error enviando ubicación: ${response.code}")
-                }
-
-            } catch (e: Exception) {
-                println("❌ [LOCATION] Error: ${e.message}")
+            if (token == null) {
+                println("⚠️ [LOCATION] No hay token - ABORTANDO")
+                return@Thread
             }
-        }.start()
-    }
+
+            println("✅ [LOCATION] Token encontrado: ${token.substring(0, 20)}...")
+            println("📍 [LOCATION] Lat: ${location.latitude}, Lon: ${location.longitude}")
+            println("🎯 [LOCATION] Accuracy: ${location.accuracy} metros")
+
+            val json = JSONObject().apply {
+                put("latitude", location.latitude)
+                put("longitude", location.longitude)
+                put("accuracy", location.accuracy)
+            }
+
+            println("📦 [LOCATION] JSON: ${json.toString()}")
+
+            val body = json.toString().toRequestBody("application/json".toMediaType())
+
+            // ✅ URL CORREGIDA
+            val url = "$baseUrl/api/link/location/update"
+            println("🔗 [LOCATION] URL: $url")
+
+            val request = Request.Builder()
+                .url(url)  // ✅ ESTA ES LA CORRECCIÓN PRINCIPAL
+                .addHeader("Authorization", "Bearer $token")
+                .post(body)
+                .build()
+
+            println("📡 [LOCATION] Enviando request...")
+            val response = client.newCall(request).execute()
+
+            println("📊 [LOCATION] Status Code: ${response.code}")
+            
+            if (response.isSuccessful) {
+                println("✅✅✅ [LOCATION] Ubicación enviada EXITOSAMENTE")
+            } else {
+                val errorBody = response.body?.string() ?: "Sin respuesta"
+                println("❌ [LOCATION] Error ${response.code}: $errorBody")
+            }
+
+        } catch (e: Exception) {
+            println("❌❌❌ [LOCATION] Error CRÍTICO: ${e.message}")
+            e.printStackTrace()
+        } finally {
+            println("🌐 [LOCATION] ==========================================")
+        }
+    }.start()
+}
 
     override fun onDestroy() {
         super.onDestroy()
