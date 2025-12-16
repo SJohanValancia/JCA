@@ -185,7 +185,7 @@ exports.respondToRequest = async (req, res) => {
   }
 };
 
-// Obtener dispositivos vinculados
+// ✅ CORREGIDO: Obtener dispositivos vinculados CON deudaInfo
 exports.getLinkedDevices = async (req, res) => {
   try {
     const userId = req.user.id;
@@ -193,11 +193,26 @@ exports.getLinkedDevices = async (req, res) => {
     const links = await DeviceLink.find({
       userId,
       status: 'active'
-    }).populate('linkedUserId', 'nombre usuario jcId rol');
+    }).populate('linkedUserId', 'nombre usuario jcId rol isLocked deudaInfo'); // ✅ AGREGADO deudaInfo
+
+    console.log('📱 Dispositivos vinculados encontrados:', links.length);
+    
+    // ✅ Formatear la respuesta para incluir toda la información
+    const linkedDevices = links.map(link => ({
+      id: link.linkedUserId._id,
+      nombre: link.linkedUserId.nombre,
+      usuario: link.linkedUserId.usuario,
+      jcId: link.linkedUserId.jcId,
+      rol: link.linkedUserId.rol,
+      isLocked: link.linkedUserId.isLocked,
+      deudaInfo: link.linkedUserId.deudaInfo || null // ✅ INCLUIR deudaInfo
+    }));
+
+    console.log('💰 Vendedores con deuda:', linkedDevices.filter(d => d.rol === 'vendedor' && d.deudaInfo));
 
     res.json({
       success: true,
-      linkedDevices: links
+      linkedDevices
     });
 
   } catch (error) {
@@ -244,7 +259,6 @@ exports.updateLocation = async (req, res) => {
 };
 
 // Obtener ubicaciones de dispositivos vinculados
-// Obtener ubicaciones de dispositivos vinculados
 exports.getLinkedLocations = async (req, res) => {
   try {
     const userId = req.user.id;
@@ -257,10 +271,10 @@ exports.getLinkedLocations = async (req, res) => {
 
     const linkedUserIds = links.map(link => link.linkedUserId);
 
-    // Obtener ubicaciones y poblar con isLocked
+    // Obtener ubicaciones y poblar con isLocked y deudaInfo
     const locations = await Location.find({
       userId: { $in: linkedUserIds }
-    }).populate('userId', 'nombre usuario jcId rol isLocked'); // ✅ Agregar isLocked
+    }).populate('userId', 'nombre usuario jcId rol isLocked deudaInfo'); // ✅ Agregar deudaInfo
 
     res.json({
       success: true,
