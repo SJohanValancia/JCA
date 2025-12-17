@@ -2,11 +2,11 @@ package com.example.security_app
 
 import android.app.ActivityManager
 import android.app.admin.DevicePolicyManager
-import android.content.BroadcastReceiver  // ✅ AGREGAR
+import android.content.BroadcastReceiver
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
-import android.content.IntentFilter  // ✅ AGREGAR
+import android.content.IntentFilter
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -18,7 +18,7 @@ class MainActivity : FlutterActivity() {
     private val CHANNEL = "com.example.security_app/device_owner"
     private lateinit var devicePolicyManager: DevicePolicyManager
     private lateinit var adminComponent: ComponentName
-        private lateinit var locationReceiver: BroadcastReceiver // ✅ NUEVO
+    private lateinit var locationReceiver: BroadcastReceiver
     private var isLocationReceiverRegistered = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -28,17 +28,78 @@ class MainActivity : FlutterActivity() {
         activateSecurityLockdown()
         
         checkAndStartMonitorService()
-
-        registerLocationReceiver() 
+        registerLocationReceiver()
+        
+        // ✅ VERIFICAR SI ES VENDEDOR Y ASEGURAR QUE LOCATIONSERVICE ESTÉ CORRIENDO
+        ensureLocationServiceForVendor()
     }
 
-      private fun registerLocationReceiver() {
+    // ✅ NUEVO: Verificar si es vendedor e iniciar LocationService
+private fun ensureLocationServiceForVendor() {
+    try {
+        val securePrefs = getSharedPreferences(
+            "flutter.flutter_secure_storage",
+            Context.MODE_PRIVATE
+        )
+        val userJson = securePrefs.getString("flutter.user", null)
+        
+        if (userJson != null) {
+            val jsonObj = org.json.JSONObject(userJson)
+            val rol = jsonObj.optString("rol", "dueno")
+            
+            if (rol == "vendedor") {
+                println("🛒 [MAIN] Vendedor detectado en onCreate")
+                
+                // ✅ Iniciar LocationTrackingService
+                ensureLocationServiceRunning()
+                
+                // ✅ NUEVO: Iniciar LocationMonitorService
+                try {
+                    val monitorIntent = Intent(this, LocationMonitorService::class.java)
+                    startForegroundService(monitorIntent)
+                    println("✅ [MAIN] LocationMonitorService iniciado")
+                } catch (e: Exception) {
+                    println("❌ [MAIN] Error iniciando monitor: ${e.message}")
+                }
+            }
+        }
+    } catch (e: Exception) {
+        println("⚠️ [MAIN] Error verificando rol: ${e.message}")
+    }
+}
+
+    private fun ensureLocationServiceRunning() {
+        try {
+            val activityManager = getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
+            var isLocationServiceRunning = false
+            
+            for (service in activityManager.getRunningServices(Int.MAX_VALUE)) {
+                if (LocationTrackingService::class.java.name == service.service.className) {
+                    isLocationServiceRunning = true
+                    break
+                }
+            }
+            
+            if (!isLocationServiceRunning) {
+                println("⚠️ [MAIN] LocationService NO está corriendo - INICIANDO")
+                val locationIntent = Intent(this, LocationTrackingService::class.java)
+                startForegroundService(locationIntent)
+                println("✅ [MAIN] LocationService iniciado")
+            } else {
+                println("✅ [MAIN] LocationService YA está corriendo")
+            }
+        } catch (e: Exception) {
+            println("❌ [MAIN] Error verificando LocationService: ${e.message}")
+        }
+    }
+
+    private fun registerLocationReceiver() {
         try {
             locationReceiver = object : BroadcastReceiver() {
                 override fun onReceive(context: Context?, intent: Intent?) {
                     if (intent?.action == "com.example.security_app.START_LOCATION_TRACKING") {
                         println("📍 [MAIN] Broadcast recibido - Activando tracking")
-                        activateLocationTracking()
+                        ensureLocationServiceRunning()
                     }
                 }
             }
@@ -49,31 +110,6 @@ class MainActivity : FlutterActivity() {
             println("✅ [MAIN] Location receiver registrado")
         } catch (e: Exception) {
             println("❌ [MAIN] Error registrando location receiver: ${e.message}")
-        }
-    }
-
-    // ✅ NUEVO: Activar tracking desde Flutter
-    private fun activateLocationTracking() {
-        try {
-            flutterEngine?.dartExecutor?.binaryMessenger?.let { messenger ->
-                MethodChannel(messenger, CHANNEL).invokeMethod(
-                    "activateLocationTracking",
-                    null,
-                    object : MethodChannel.Result {
-                        override fun success(result: Any?) {
-                            println("✅ [MAIN] Location tracking activado en Flutter")
-                        }
-                        override fun error(errorCode: String, errorMessage: String?, errorDetails: Any?) {
-                            println("❌ [MAIN] Error activando tracking: $errorMessage")
-                        }
-                        override fun notImplemented() {
-                            println("⚠️ [MAIN] Método no implementado en Flutter")
-                        }
-                    }
-                )
-            }
-        } catch (e: Exception) {
-            println("❌ [MAIN] Error invocando método Flutter: ${e.message}")
         }
     }
 
@@ -88,7 +124,6 @@ class MainActivity : FlutterActivity() {
         }
     }
 
-    // ✅ Activar lockdown de seguridad automáticamente
     private fun activateSecurityLockdown() {
         try {
             devicePolicyManager = getSystemService(Context.DEVICE_POLICY_SERVICE) as DevicePolicyManager
@@ -97,23 +132,18 @@ class MainActivity : FlutterActivity() {
             if (devicePolicyManager.isDeviceOwnerApp(packageName)) {
                 println("🔒 ========== ACTIVANDO LOCKDOWN AUTOMÁTICO ==========")
                 
-                // 1️⃣ Bloquear depuración USB
                 devicePolicyManager.addUserRestriction(adminComponent, "no_debugging_features")
                 println("✅ Depuración USB bloqueada")
                 
-                // 2️⃣ Ocultar opciones de desarrollador
                 devicePolicyManager.addUserRestriction(adminComponent, "no_config_credentials")
                 println("✅ Opciones de desarrollador ocultas")
                 
-                // 3️⃣ Bloquear factory reset
                 devicePolicyManager.addUserRestriction(adminComponent, "no_factory_reset")
                 println("✅ Factory reset bloqueado")
                 
-                // 4️⃣ Proteger la app contra desinstalación manual
                 devicePolicyManager.setUninstallBlocked(adminComponent, packageName, true)
                 println("✅ App protegida contra desinstalación manual")
                 
-                // 5️⃣ Guardar estado de protección
                 val prefs = getSharedPreferences("app_protection", Context.MODE_PRIVATE)
                 prefs.edit().putBoolean("is_protected", true).apply()
                 
@@ -138,11 +168,9 @@ class MainActivity : FlutterActivity() {
             if (token != null) {
                 println("✅ Token encontrado - Iniciando servicios")
                 
-                // Iniciar LockMonitorService
                 val lockServiceIntent = Intent(this, LockMonitorService::class.java)
                 startForegroundService(lockServiceIntent)
                 
-                // Iniciar AdbDetectionService
                 val adbServiceIntent = Intent(this, AdbDetectionService::class.java)
                 startForegroundService(adbServiceIntent)
                 
@@ -180,6 +208,17 @@ class MainActivity : FlutterActivity() {
                     println("🔍 isLocked llamado, retornando: $isLocked")
                     result.success(isLocked)
                 }
+                "startLocationService" -> {
+                    try {
+                        val locationIntent = Intent(this, LocationTrackingService::class.java)
+                        startForegroundService(locationIntent)
+                        println("✅ [MAIN] LocationTrackingService iniciado")
+                        result.success(true)
+                    } catch (e: Exception) {
+                        println("❌ [MAIN] Error iniciando LocationService: ${e.message}")
+                        result.success(false)
+                    }
+                }
                 "startMonitorService" -> {
                     try {
                         val serviceIntent = Intent(this, LockMonitorService::class.java)
@@ -190,6 +229,19 @@ class MainActivity : FlutterActivity() {
                         result.success(false)
                     }
                 }
+
+"startLocationMonitor" -> {
+    try {
+        val monitorIntent = Intent(this, LocationMonitorService::class.java)
+        startForegroundService(monitorIntent)
+        println("✅ [MAIN] LocationMonitorService iniciado")
+        result.success(true)
+    } catch (e: Exception) {
+        println("❌ [MAIN] Error iniciando monitor: ${e.message}")
+        result.success(false)
+    }
+}
+
                 "forceUnlock" -> {
                     val success = forceUnlockDevice()
                     result.success(success)
@@ -211,7 +263,6 @@ class MainActivity : FlutterActivity() {
                     val protected = isAppProtected()
                     result.success(protected)
                 }
-                
                 else -> {
                     println("❌ Método no implementado: ${call.method}")
                     result.notImplemented()
@@ -231,7 +282,7 @@ class MainActivity : FlutterActivity() {
                 val prefs = getSharedPreferences("app_protection", Context.MODE_PRIVATE)
                 prefs.edit().putBoolean("is_protected", true).apply()
                 
-                println("✅ ========== PROTECCIÓN ACTIVADA (actualizaciones permitidas) ==========")
+                println("✅ ========== PROTECCIÓN ACTIVADA ==========")
                 true
             } else {
                 println("❌ No es Device Owner - No se puede proteger")
@@ -250,16 +301,9 @@ class MainActivity : FlutterActivity() {
                 println("🔒 ========== ACTIVANDO LOCKDOWN ==========")
                 
                 devicePolicyManager.addUserRestriction(adminComponent, "no_debugging_features")
-                println("✅ Depuración USB bloqueada")
-                
                 devicePolicyManager.addUserRestriction(adminComponent, "no_config_credentials")
-                println("✅ Opciones de desarrollador ocultas")
-                
                 devicePolicyManager.addUserRestriction(adminComponent, "no_factory_reset")
-                println("✅ Factory reset bloqueado")
-                
                 devicePolicyManager.setUninstallBlocked(adminComponent, packageName, true)
-                println("✅ App protegida contra desinstalación manual")
                 
                 val prefs = getSharedPreferences("app_protection", Context.MODE_PRIVATE)
                 prefs.edit().putBoolean("is_protected", true).apply()
@@ -267,12 +311,10 @@ class MainActivity : FlutterActivity() {
                 println("✅ ========== LOCKDOWN ACTIVADO ==========")
                 true
             } else {
-                println("❌ No es Device Owner")
                 false
             }
         } catch (e: Exception) {
             println("❌ Error en lockdown: ${e.message}")
-            e.printStackTrace()
             false
         }
     }
@@ -283,13 +325,8 @@ class MainActivity : FlutterActivity() {
                 println("🔓 ========== LIBERANDO APP ==========")
                 
                 devicePolicyManager.clearUserRestriction(adminComponent, "no_debugging_features")
-                println("✅ Depuración USB habilitada")
-                
                 devicePolicyManager.clearUserRestriction(adminComponent, "no_config_credentials")
-                println("✅ Opciones de desarrollador visibles")
-                
                 devicePolicyManager.setUninstallBlocked(adminComponent, packageName, false)
-                println("✅ Desinstalación manual permitida")
                 
                 val prefs = getSharedPreferences("app_protection", Context.MODE_PRIVATE)
                 prefs.edit().apply {
@@ -299,15 +336,13 @@ class MainActivity : FlutterActivity() {
                     apply()
                 }
                 
-                println("✅ ========== APP LIBERADA - PUEDE SER DESINSTALADA ==========")
+                println("✅ ========== APP LIBERADA ==========")
                 true
             } else {
-                println("❌ No es Device Owner")
                 false
             }
         } catch (e: Exception) {
             println("❌ Error liberando app: ${e.message}")
-            e.printStackTrace()
             false
         }
     }
@@ -329,21 +364,10 @@ class MainActivity : FlutterActivity() {
                     putLong("lock_activation_time", System.currentTimeMillis())
                     apply()
                 }
-                println("✅ Estado guardado en SharedPreferences")
-
-                // ✅ Enviar broadcast para activar ubicación
-                try {
-                    val locationIntent = Intent("com.example.security_app.START_LOCATION_TRACKING")
-                    sendBroadcast(locationIntent)
-                    println("📍 Broadcast de ubicación enviado")
-                } catch (e: Exception) {
-                    println("⚠️ Error enviando broadcast: ${e.message}")
-                }
 
                 try {
                     val serviceIntent = Intent(this, LockMonitorService::class.java)
                     startForegroundService(serviceIntent)
-                    println("✅ LockMonitorService iniciado/reiniciado")
                 } catch (e: Exception) {
                     println("❌ Error con servicio: ${e.message}")
                 }
@@ -352,17 +376,14 @@ class MainActivity : FlutterActivity() {
                     val intent = Intent(this, LockScreenActivity::class.java)
                     intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
                     startActivity(intent)
-                    println("✅ LockScreenActivity lanzada")
                 }, 500)
 
                 true
             } else {
-                println("❌ No es Device Owner")
                 false
             }
         } catch (e: Exception) {
             println("❌ Error en lockDevice: ${e.message}")
-            e.printStackTrace()
             false
         }
     }
@@ -372,16 +393,11 @@ class MainActivity : FlutterActivity() {
             println("🔓 Iniciando desbloqueo completo")
             
             val prefs = getSharedPreferences("lock_prefs", Context.MODE_PRIVATE)
-            prefs.edit().apply {
-                putBoolean("is_locked", false)
-                apply()
-            }
-            println("✅ SharedPreferences actualizado")
+            prefs.edit().putBoolean("is_locked", false).apply()
             
             try {
                 val unlockIntent = Intent("com.example.security_app.UNLOCK_DEVICE")
                 sendBroadcast(unlockIntent)
-                println("📡 Broadcast enviado")
             } catch (e: Exception) {
                 println("⚠️ Error enviando broadcast: ${e.message}")
             }
@@ -391,11 +407,8 @@ class MainActivity : FlutterActivity() {
                 val tasks = activityManager.appTasks
                 
                 for (task in tasks) {
-                    val taskInfo = task.taskInfo
-                    val className = taskInfo.baseActivity?.className
-                    
+                    val className = task.taskInfo.baseActivity?.className
                     if (className == "com.example.security_app.LockScreenActivity") {
-                        println("🗑️ Cerrando LockScreenActivity")
                         task.finishAndRemoveTask()
                     }
                 }
@@ -405,25 +418,10 @@ class MainActivity : FlutterActivity() {
             
             val serviceIntent = Intent(this, LockMonitorService::class.java)
             stopService(serviceIntent)
-            println("✅ Servicio detenido")
             
-            try {
-                if (devicePolicyManager.isDeviceOwnerApp(packageName)) {
-                    devicePolicyManager.setKeyguardDisabled(adminComponent, false)
-                    devicePolicyManager.setStatusBarDisabled(adminComponent, false)
-                    devicePolicyManager.setLockTaskPackages(adminComponent, arrayOf())
-                    println("✅ Device Owner restaurado")
-                }
-            } catch (e: Exception) {
-                println("⚠️ Error restaurando Device Owner: ${e.message}")
-            }
-            
-            println("✅ Desbloqueo completo exitoso")
             true
-            
         } catch (e: Exception) {
-            println("❌ Error crítico en unlockDevice: ${e.message}")
-            e.printStackTrace()
+            println("❌ Error en unlockDevice: ${e.message}")
             false
         }
     }
@@ -433,72 +431,33 @@ class MainActivity : FlutterActivity() {
             println("🚨 FORZANDO DESBLOQUEO DE EMERGENCIA")
             
             val prefs = getSharedPreferences("lock_prefs", Context.MODE_PRIVATE)
-            prefs.edit().apply {
-                putBoolean("is_locked", false)
-                apply()
-            }
-            println("✅ SharedPreferences actualizado a is_locked = false")
+            prefs.edit().putBoolean("is_locked", false).apply()
             
-            try {
-                val unlockIntent = Intent("com.example.security_app.UNLOCK_DEVICE")
-                sendBroadcast(unlockIntent)
-                println("📡 Broadcast de desbloqueo enviado")
-            } catch (e: Exception) {
-                println("⚠️ Error enviando broadcast: ${e.message}")
-            }
+            val unlockIntent = Intent("com.example.security_app.UNLOCK_DEVICE")
+            sendBroadcast(unlockIntent)
             
-            try {
-                val activityManager = getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
-                val tasks = activityManager.appTasks
-                
-                println("🔍 Buscando LockScreenActivity en ${tasks.size} tareas")
-                
-                for (task in tasks) {
-                    val taskInfo = task.taskInfo
-                    val className = taskInfo.baseActivity?.className
-                    println("📋 Tarea encontrada: $className")
-                    
-                    if (className?.contains("LockScreenActivity") == true) {
-                        println("🗑️ Finalizando LockScreenActivity")
-                        task.finishAndRemoveTask()
-                        println("✅ LockScreenActivity finalizada exitosamente")
-                    }
+            val activityManager = getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
+            activityManager.appTasks.forEach { task ->
+                if (task.taskInfo.baseActivity?.className?.contains("LockScreenActivity") == true) {
+                    task.finishAndRemoveTask()
                 }
-            } catch (e: Exception) {
-                println("❌ Error finalizando activity: ${e.message}")
-                e.printStackTrace()
             }
             
-            try {
-                val serviceIntent = Intent(this, LockMonitorService::class.java)
-                stopService(serviceIntent)
-                println("✅ LockMonitorService detenido")
-            } catch (e: Exception) {
-                println("⚠️ Error deteniendo servicio: ${e.message}")
+            stopService(Intent(this, LockMonitorService::class.java))
+            
+            if (devicePolicyManager.isDeviceOwnerApp(packageName)) {
+                devicePolicyManager.setKeyguardDisabled(adminComponent, false)
+                devicePolicyManager.setStatusBarDisabled(adminComponent, false)
+                devicePolicyManager.setLockTaskPackages(adminComponent, arrayOf())
             }
             
-            try {
-                if (devicePolicyManager.isDeviceOwnerApp(packageName)) {
-                    devicePolicyManager.setKeyguardDisabled(adminComponent, false)
-                    devicePolicyManager.setStatusBarDisabled(adminComponent, false)
-                    devicePolicyManager.setLockTaskPackages(adminComponent, arrayOf())
-                    println("✅ Device Owner restaurado a configuración normal")
-                }
-            } catch (e: Exception) {
-                println("⚠️ Error restaurando Device Owner: ${e.message}")
-            }
-            
-            println("✅ ForceUnlock completado exitosamente")
             true
-            
         } catch (e: Exception) {
-            println("❌ Error CRÍTICO en forceUnlock: ${e.message}")
-            e.printStackTrace()
+            println("❌ Error en forceUnlock: ${e.message}")
             false
         }
     }
 
-    // ✅ SOLO UNA DEFINICIÓN de isDeviceLocked()
     private fun isDeviceLocked(): Boolean {
         val prefs = getSharedPreferences("lock_prefs", Context.MODE_PRIVATE)
         return prefs.getBoolean("is_locked", false)

@@ -298,9 +298,12 @@ exports.updateLocation = async (req, res) => {
 };
 
 // Obtener ubicaciones de dispositivos vinculados
+// Obtener ubicaciones de dispositivos vinculados
 exports.getLinkedLocations = async (req, res) => {
   try {
     const userId = req.user.id;
+
+    console.log('📍 [LOCATIONS] Obteniendo ubicaciones para usuario:', userId);
 
     // Obtener usuarios vinculados
     const links = await DeviceLink.find({
@@ -309,26 +312,45 @@ exports.getLinkedLocations = async (req, res) => {
     }).select('linkedUserId');
 
     const linkedUserIds = links.map(link => link.linkedUserId);
+    
+    console.log('👥 [LOCATIONS] Usuarios vinculados:', linkedUserIds.length);
 
-    // Obtener ubicaciones y poblar con isLocked y deudaInfo
+    // ✅ OBTENER TODAS LAS UBICACIONES (bloqueados y no bloqueados)
     const locations = await Location.find({
       userId: { $in: linkedUserIds }
-    }).populate('userId', 'nombre usuario jcId rol isLocked deudaInfo'); // ✅ Agregar deudaInfo
+    }).populate('userId', 'nombre usuario jcId rol isLocked deudaInfo');
+
+    console.log('📍 [LOCATIONS] Ubicaciones encontradas:', locations.length);
+    
+    // ✅ Filtrar ubicaciones válidas
+    const validLocations = locations.filter(loc => {
+      if (!loc.userId) {
+        console.log('⚠️ [LOCATIONS] Ubicación sin userId');
+        return false;
+      }
+      return true;
+    });
+
+    console.log(`✅ [LOCATIONS] Total ubicaciones válidas: ${validLocations.length}`);
+    
+    // ✅ Log detallado de cada ubicación
+    validLocations.forEach(loc => {
+      console.log(`   - ${loc.userId.nombre} (${loc.userId.jcId}): isLocked=${loc.userId.isLocked}, lat=${loc.latitude}, lon=${loc.longitude}`);
+    });
 
     res.json({
       success: true,
-      locations
+      locations: validLocations
     });
 
   } catch (error) {
-    console.error('Error obteniendo ubicaciones:', error);
+    console.error('❌ [LOCATIONS] Error:', error);
     res.status(500).json({
       success: false,
       message: 'Error en el servidor'
     });
   }
 };
-
 // Desvincular dispositivo
 exports.unlinkDevice = async (req, res) => {
   try {

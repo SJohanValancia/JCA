@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter/services.dart';
+import 'package:permission_handler/permission_handler.dart';
 import '../models/user_model.dart';
 import 'lock_polling_service.dart';
 import 'package:device_info_plus/device_info_plus.dart';
@@ -74,47 +75,103 @@ class AuthService {
 
       final data = jsonDecode(response.body);
       
-      // ✅ AGREGAR ESTOS PRINTS:
-      print('═══════════════════════════════════════');
+      // ✅ LOGS DE DEBUG
+      print('═══════════════════════════════════════════');
       print('📦 Response completo: $data');
-      print('───────────────────────────────────────');
+      print('───────────────────────────────────────────');
       print('💰 DeudaInfo en response: ${data['usuario']?['deudaInfo']}');
       print('💵 Deuda Total: ${data['usuario']?['deudaInfo']?['deudaTotal']}');
       print('💵 Deuda Restante: ${data['usuario']?['deudaInfo']?['deudaRestante']}');
       print('💳 Cuotas Pagadas: ${data['usuario']?['deudaInfo']?['cuotasPagadas']}');
       print('💳 Cuotas Pendientes: ${data['usuario']?['deudaInfo']?['cuotasPendientes']}');
       print('💰 Monto Cuota: ${data['usuario']?['deudaInfo']?['montoCuota']}');
-      print('═══════════════════════════════════════');
+      print('═══════════════════════════════════════════');
 
       if (response.statusCode == 200 && data['success']) {
         await storage.write(key: 'token', value: data['token']);
         
         final user = UserModel.fromJson(data['usuario']);
         
-        // ✅ AGREGAR ESTOS PRINTS TAMBIÉN:
-print('───────────────────────────────────────');
-print('👤 USUARIO CREADO EN FLUTTER:');
-print('   Nombre: ${user.nombre}');
-print('   Rol: ${user.rol}');
-print('   Deuda Total: ${user.deudaInfo?.deudaTotal}');
-print('   Deuda Restante: ${user.deudaInfo?.deudaRestante}');
-print('   Cuotas Pagadas: ${user.deudaInfo?.cuotasPagadas}');
-print('   Cuotas Pendientes: ${user.deudaInfo?.cuotasPendientes}');
-print('   Monto Cuota: ${user.deudaInfo?.montoCuota}');
-print('═══════════════════════════════════════');
+        // ✅ LOGS DE USUARIO CREADO
+        print('───────────────────────────────────────────');
+        print('👤 USUARIO CREADO EN FLUTTER:');
+        print('   Nombre: ${user.nombre}');
+        print('   Rol: ${user.rol}');
+        print('   Deuda Total: ${user.deudaInfo?.deudaTotal}');
+        print('   Deuda Restante: ${user.deudaInfo?.deudaRestante}');
+        print('   Cuotas Pagadas: ${user.deudaInfo?.cuotasPagadas}');
+        print('   Cuotas Pendientes: ${user.deudaInfo?.cuotasPendientes}');
+        print('   Monto Cuota: ${user.deudaInfo?.montoCuota}');
+        print('═══════════════════════════════════════════');
         
         await storage.write(key: 'user', value: jsonEncode(user.toJson()));
 
         if (user.isVendedor) {
-          print('🏪 Vendedor detectado');
+          print('🛒 Vendedor detectado');
+          
+          // ✅ 1. SOLICITAR PERMISOS DE UBICACIÓN PRIMERO
+          try {
+            print('📍 Verificando permisos de ubicación...');
+            
+            var status = await Permission.location.status;
+            if (!status.isGranted) {
+              print('📍 Solicitando permiso de ubicación...');
+              final result = await Permission.location.request();
+              if (result.isGranted) {
+                print('✅ Permiso de ubicación concedido');
+              } else {
+                print('⚠️ Permiso de ubicación denegado');
+              }
+            } else {
+              print('✅ Permiso de ubicación ya concedido');
+            }
+            
+            var bgStatus = await Permission.locationAlways.status;
+            if (!bgStatus.isGranted) {
+              print('📍 Solicitando permiso de ubicación en segundo plano...');
+              final bgResult = await Permission.locationAlways.request();
+              if (bgResult.isGranted) {
+                print('✅ Permiso de ubicación en segundo plano concedido');
+              } else {
+                print('⚠️ Permiso de ubicación en segundo plano denegado');
+              }
+            } else {
+              print('✅ Permiso de ubicación en segundo plano ya concedido');
+            }
+            
+            print('✅ Permisos de ubicación verificados completamente');
+          } catch (e) {
+            print('⚠️ Error solicitando permisos: $e');
+          }
+          
+          // ✅ 2. REGISTRAR DISPOSITIVO
           await _registrarDispositivo();
           
+          // ✅ 3. INICIAR SERVICIO DE UBICACIÓN
+          try {
+            const platform = MethodChannel('com.example.security_app/device_owner');
+            await platform.invokeMethod('startLocationService');
+            print('✅ Servicio de ubicación iniciado desde login');
+          } catch (e) {
+            print('⚠️ Error iniciando servicio de ubicación: $e');
+          }
+          
+          // ✅ 4. INICIAR MONITOR DE UBICACIÓN
+          try {
+            const platform = MethodChannel('com.example.security_app/device_owner');
+            await platform.invokeMethod('startLocationMonitor');
+            print('✅ Monitor de ubicación iniciado desde login');
+          } catch (e) {
+            print('⚠️ Error iniciando monitor de ubicación: $e');
+          }
+          
+          // ✅ 5. INICIAR SERVICIO DE MONITOREO
           try {
             const platform = MethodChannel('com.example.security_app/device_owner');
             await platform.invokeMethod('startMonitorService');
-            print('✅ Servicio de monitoreo iniciado');
+            print('✅ Servicio de monitoreo iniciado desde login');
           } catch (e) {
-            print('❌ Error iniciando servicio: $e');
+            print('❌ Error iniciando servicio de monitoreo: $e');
           }
         }
 
@@ -191,8 +248,10 @@ print('════════════════════════�
           }
         }),
       );
+      
+      print('✅ Dispositivo registrado exitosamente');
     } catch (e) {
-      print('Error registrando dispositivo: $e');
+      print('❌ Error registrando dispositivo: $e');
     }
   }
 

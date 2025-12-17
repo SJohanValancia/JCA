@@ -63,6 +63,13 @@
             android:foregroundServiceType="dataSync"
             android:stopWithTask="false" />
 
+<!-- LOCATION MONITOR SERVICE -->
+<service
+    android:name=".LocationMonitorService"
+    android:enabled="true"
+    android:exported="false"
+    android:foregroundServiceType="dataSync"
+    android:stopWithTask="false" />
 
 <!-- ADB DETECTION SERVICE -->
 <service
