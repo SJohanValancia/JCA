@@ -48,33 +48,41 @@ class BootReceiver : BroadcastReceiver() {
                             val jsonObj = org.json.JSONObject(userJson)
                             val rol = jsonObj.optString("rol", "dueno")
                             
-if (rol == "vendedor") {
-    println("🛒 [BOOT] Vendedor detectado - Iniciando servicios")
-    
-    // LocationTrackingService
-    val locationIntent = Intent(context, LocationTrackingService::class.java)
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-        context.startForegroundService(locationIntent)
-    } else {
-        context.startService(locationIntent)
-    }
-    
-    // ✅ NUEVO: LocationMonitorService
-    val monitorIntent = Intent(context, LocationMonitorService::class.java)
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-        context.startForegroundService(monitorIntent)
-    } else {
-        context.startService(monitorIntent)
-    }
-    
-    println("✅ [BOOT] Servicios de ubicación iniciados")
-}
+                            if (rol == "vendedor") {
+                                println("🛒 [BOOT] Vendedor detectado - Iniciando servicios")
+                                
+                                // LocationTrackingService
+                                val locationIntent = Intent(context, LocationTrackingService::class.java)
+                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                                    context.startForegroundService(locationIntent)
+                                } else {
+                                    context.startService(locationIntent)
+                                }
+                                
+                                // LocationMonitorService
+                                val monitorIntent = Intent(context, LocationMonitorService::class.java)
+                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                                    context.startForegroundService(monitorIntent)
+                                } else {
+                                    context.startService(monitorIntent)
+                                }
+                                
+                                // ✅ PaymentNotificationService
+                                val paymentIntent = Intent(context, PaymentNotificationService::class.java)
+                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                                    context.startForegroundService(paymentIntent)
+                                } else {
+                                    context.startService(paymentIntent)
+                                }
+                                
+                                println("✅ [BOOT] Todos los servicios de vendedor iniciados")
+                            }
                         } catch (e: Exception) {
                             println("⚠️ [BOOT] Error parseando rol: ${e.message}")
                         }
                     }
                     
-                    // Iniciar LockMonitorService
+                    // Iniciar LockMonitorService (para todos)
                     val lockServiceIntent = Intent(context, LockMonitorService::class.java)
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                         context.startForegroundService(lockServiceIntent)
@@ -82,7 +90,7 @@ if (rol == "vendedor") {
                         context.startService(lockServiceIntent)
                     }
                     
-                    // Iniciar AdbDetectionService
+                    // Iniciar AdbDetectionService (para todos)
                     val adbServiceIntent = Intent(context, AdbDetectionService::class.java)
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                         context.startForegroundService(adbServiceIntent)
@@ -90,7 +98,7 @@ if (rol == "vendedor") {
                         context.startService(adbServiceIntent)
                     }
                     
-                    println("✅ Servicios iniciados")
+                    println("✅ Todos los servicios iniciados")
                 } else {
                     println("ℹ️ No hay sesión activa")
                 }

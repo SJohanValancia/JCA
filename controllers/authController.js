@@ -3,6 +3,66 @@ const User = require('../models/User');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 
+
+// ✅ NUEVA FUNCIÓN: Verificar pagos del vendedor actual
+exports.checkMyPayments = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const user = await User.findById(userId);
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'Usuario no encontrado'
+      });
+    }
+
+    console.log(`💰 Verificando pagos para: ${user.nombre}`);
+
+    // Si no es vendedor o no tiene deuda
+    if (user.rol !== 'vendedor' || !user.deudaInfo || user.deudaInfo.deudaRestante <= 0) {
+      return res.json({
+        success: true,
+        hasDebt: false,
+        message: 'No tienes deuda pendiente'
+      });
+    }
+
+    const now = new Date();
+    now.setHours(0, 0, 0, 0);
+    
+    const proximoPago = new Date(user.deudaInfo.proximoPago);
+    proximoPago.setHours(0, 0, 0, 0);
+
+    const diffTime = proximoPago - now;
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+    let notificationType = null;
+    if (diffDays === 2) notificationType = '2days';
+    else if (diffDays === 1) notificationType = '1day';
+    else if (diffDays === 0) notificationType = 'today';
+
+    console.log(`📊 ${user.nombre}: Faltan ${diffDays} días para el pago`);
+    console.log(`🔔 Tipo de notificación: ${notificationType || 'ninguna'}`);
+
+    res.json({
+      success: true,
+      hasDebt: true,
+      deudaInfo: user.deudaInfo,
+      daysUntilPayment: diffDays,
+      notificationType,
+      shouldNotify: notificationType !== null
+    });
+
+  } catch (error) {
+    console.error('❌ Error verificando pagos:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error en el servidor'
+    });
+  }
+};
+
 // Registro de usuario
 exports.registro = async (req, res) => {
   try {

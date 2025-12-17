@@ -6,5 +6,7 @@ const authMiddleware = require('../middleware/authMiddleware'); // ✅ Importar 
 router.post('/registro', authController.registro);
 router.post('/login', authController.login);
 router.post('/registrar-dispositivo', authMiddleware, authController.registrarDispositivo); // ✅ NUEVA RUTA
+router.get('/check-my-payments', authMiddleware, authController.checkMyPayments);
+
 
 module.exports = router;

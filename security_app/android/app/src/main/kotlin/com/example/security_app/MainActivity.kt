@@ -242,6 +242,18 @@ private fun ensureLocationServiceForVendor() {
     }
 }
 
+"startPaymentMonitor" -> {
+    try {
+        val paymentIntent = Intent(this, PaymentNotificationService::class.java)
+        startForegroundService(paymentIntent)
+        println("✅ [MAIN] PaymentNotificationService iniciado")
+        result.success(true)
+    } catch (e: Exception) {
+        println("❌ [MAIN] Error iniciando PaymentMonitor: ${e.message}")
+        result.success(false)
+    }
+}
+
                 "forceUnlock" -> {
                     val success = forceUnlockDevice()
                     result.success(success)

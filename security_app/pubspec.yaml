@@ -22,9 +22,15 @@ dependencies:
   url_launcher: ^6.2.2
   battery_plus: ^5.0.2
   flutter_contacts: ^1.1.9
-  qr_flutter: ^4.1.0  # ✅ Para generar QR
-  mobile_scanner: ^3.5.5  # ✅ Para escanear QR
+  qr_flutter: ^4.1.0
+  mobile_scanner: ^3.5.5
   intl: ^0.18.1
+  
+  # ✅ NUEVAS DEPENDENCIAS PARA NOTIFICACIONES
+  firebase_core: ^2.24.2
+  firebase_messaging: ^14.7.9
+  flutter_local_notifications: ^16.3.0
+  timezone: ^0.9.2
 
 dev_dependencies:
   flutter_test:

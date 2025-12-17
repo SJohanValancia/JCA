@@ -42,24 +42,35 @@ const userSchema = new mongoose.Schema({
     default: 'dueno',
     required: true
   },
-
-    isLocked: { // ✅ NUEVO
+  isLocked: {
     type: Boolean,
     default: false
   },
-
   deviceId: {
-  type: String,
-  default: null,
-  index: true  // Para búsquedas rápidas
-},
-deviceInfo: {
-  modelo: String,
-  marca: String,
-  version: String,
-  registradoEn: Date
-},
-  // ✅ Información de deuda (se actualiza desde el dueño)
+    type: String,
+    default: null,
+    index: true
+  },
+  deviceInfo: {
+    modelo: String,
+    marca: String,
+    version: String,
+    registradoEn: Date
+  },
+  // ✅ NUEVO: Token FCM para notificaciones
+  fcmToken: {
+    type: String,
+    default: null
+  },
+  // ✅ NUEVO: Historial de notificaciones enviadas
+  notificationHistory: [{
+    type: {
+      type: String,
+      enum: ['2days', '1day', 'today']
+    },
+    sentAt: Date,
+    cuotaNumber: Number
+  }],
   deudaInfo: {
     deudaTotal: { type: Number, default: 0 },
     deudaRestante: { type: Number, default: 0 },

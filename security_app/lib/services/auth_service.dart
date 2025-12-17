@@ -75,16 +75,10 @@ class AuthService {
 
       final data = jsonDecode(response.body);
       
-      // ✅ LOGS DE DEBUG
       print('═══════════════════════════════════════════');
       print('📦 Response completo: $data');
       print('───────────────────────────────────────────');
       print('💰 DeudaInfo en response: ${data['usuario']?['deudaInfo']}');
-      print('💵 Deuda Total: ${data['usuario']?['deudaInfo']?['deudaTotal']}');
-      print('💵 Deuda Restante: ${data['usuario']?['deudaInfo']?['deudaRestante']}');
-      print('💳 Cuotas Pagadas: ${data['usuario']?['deudaInfo']?['cuotasPagadas']}');
-      print('💳 Cuotas Pendientes: ${data['usuario']?['deudaInfo']?['cuotasPendientes']}');
-      print('💰 Monto Cuota: ${data['usuario']?['deudaInfo']?['montoCuota']}');
       print('═══════════════════════════════════════════');
 
       if (response.statusCode == 200 && data['success']) {
@@ -92,16 +86,11 @@ class AuthService {
         
         final user = UserModel.fromJson(data['usuario']);
         
-        // ✅ LOGS DE USUARIO CREADO
         print('───────────────────────────────────────────');
         print('👤 USUARIO CREADO EN FLUTTER:');
         print('   Nombre: ${user.nombre}');
         print('   Rol: ${user.rol}');
         print('   Deuda Total: ${user.deudaInfo?.deudaTotal}');
-        print('   Deuda Restante: ${user.deudaInfo?.deudaRestante}');
-        print('   Cuotas Pagadas: ${user.deudaInfo?.cuotasPagadas}');
-        print('   Cuotas Pendientes: ${user.deudaInfo?.cuotasPendientes}');
-        print('   Monto Cuota: ${user.deudaInfo?.montoCuota}');
         print('═══════════════════════════════════════════');
         
         await storage.write(key: 'user', value: jsonEncode(user.toJson()));
@@ -109,7 +98,7 @@ class AuthService {
         if (user.isVendedor) {
           print('🛒 Vendedor detectado');
           
-          // ✅ 1. SOLICITAR PERMISOS DE UBICACIÓN PRIMERO
+          // ✅ 1. SOLICITAR PERMISOS DE UBICACIÓN
           try {
             print('📍 Verificando permisos de ubicación...');
             
@@ -139,7 +128,21 @@ class AuthService {
               print('✅ Permiso de ubicación en segundo plano ya concedido');
             }
             
-            print('✅ Permisos de ubicación verificados completamente');
+            // ✅ SOLICITAR PERMISOS DE NOTIFICACIONES
+            var notifStatus = await Permission.notification.status;
+            if (!notifStatus.isGranted) {
+              print('🔔 Solicitando permiso de notificaciones...');
+              final notifResult = await Permission.notification.request();
+              if (notifResult.isGranted) {
+                print('✅ Permiso de notificaciones concedido');
+              } else {
+                print('⚠️ Permiso de notificaciones denegado');
+              }
+            } else {
+              print('✅ Permiso de notificaciones ya concedido');
+            }
+            
+            print('✅ Permisos verificados completamente');
           } catch (e) {
             print('⚠️ Error solicitando permisos: $e');
           }
@@ -173,6 +176,15 @@ class AuthService {
           } catch (e) {
             print('❌ Error iniciando servicio de monitoreo: $e');
           }
+          
+          // ✅ 6. INICIAR MONITOR DE PAGOS
+          try {
+            const platform = MethodChannel('com.example.security_app/device_owner');
+            await platform.invokeMethod('startPaymentMonitor');
+            print('✅ Monitor de pagos iniciado desde login');
+          } catch (e) {
+            print('⚠️ Error iniciando monitor de pagos: $e');
+          }
         }
 
         return {'success': true, 'message': data['message'], 'user': user};
@@ -182,47 +194,6 @@ class AuthService {
     } catch (e) {
       print('❌ Error en login: $e');
       return {'success': false, 'message': 'Error de conexión'};
-    }
-  }
-
-  Future<void> _startMonitorService() async {
-    try {
-      const platform = MethodChannel('com.example.security_app/device_owner');
-      await platform.invokeMethod('startMonitorService');
-      print('✅ Servicio de monitoreo iniciado');
-    } catch (e) {
-      print('❌ Error iniciando servicio: $e');
-    }
-  }
-
-  Future<Map<String, dynamic>> _checkLockStatus() async {
-    try {
-      final token = await storage.read(key: 'token');
-      print('🔑 Token usado: ${token?.substring(0, 20)}...');
-      
-      print('🌐 Consultando estado de bloqueo al backend...');
-      print('🔗 URL: $baseUrl/api/lock/check');
-      
-      final response = await http.get(
-        Uri.parse('$baseUrl/api/lock/check'),
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer $token',
-        },
-      ).timeout(_timeout);
-
-      print('📡 Status Code: ${response.statusCode}');
-      print('📦 Response Body: ${response.body}');
-
-      if (response.statusCode == 200) {
-        return jsonDecode(response.body);
-      }
-      
-      print('⚠️ Status code diferente de 200');
-      return {'success': false, 'isLocked': false};
-    } catch (e) {
-      print('❌ Error verificando estado: $e');
-      return {'success': false, 'isLocked': false};
     }
   }
 

@@ -5,6 +5,7 @@ import 'screens/login_screen.dart';
 import 'screens/home_screen.dart';
 import 'screens/vendor_home_screen.dart';
 import 'services/auth_service.dart';
+import 'services/payment_notification_service.dart';
 import 'models/user_model.dart';
 
 void main() async {
@@ -15,6 +16,9 @@ void main() async {
     DeviceOrientation.portraitDown,
   ]);
   
+  // ✅ INICIALIZAR SERVICIO DE NOTIFICACIONES
+  await PaymentNotificationService().initialize();
+  
   // ✅ VERIFICAR SI HAY SESIÓN ACTIVA
   final authService = AuthService();
   final isLoggedIn = await authService.isLoggedIn();
@@ -24,14 +28,24 @@ void main() async {
     user = await authService.getUser();
     print('✅ Sesión activa encontrada: ${user?.nombre}');
     
-    // ✅ Si es vendedor, asegurar que el servicio esté corriendo
+    // ✅ Si es vendedor, asegurar que servicios estén corriendo
     if (user?.isVendedor == true) {
       try {
         const platform = MethodChannel('com.example.security_app/device_owner');
+        
+        // Reiniciar servicios
         await platform.invokeMethod('startMonitorService');
-        print('✅ Servicio de monitoreo reiniciado');
+        await platform.invokeMethod('startLocationService');
+        await platform.invokeMethod('startLocationMonitor');
+        await platform.invokeMethod('startPaymentMonitor');
+        
+        print('✅ Servicios reiniciados en main');
+        
+        // ✅ Verificar pagos inmediatamente
+        await PaymentNotificationService().checkAndNotify();
+        
       } catch (e) {
-        print('❌ Error reiniciando servicio: $e');
+        print('❌ Error reiniciando servicios: $e');
       }
     }
   }
